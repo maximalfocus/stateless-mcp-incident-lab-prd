@@ -1,0 +1,6 @@
+kind: service
+repos: stateless-mcp-incident-lab-typescript-raw
+base_url: http://127.0.0.1:3101/raw/mcp
+up: docker compose -f stateless-mcp-incident-lab-prd/demo/raw.compose.yaml up -d --wait
+teardown: docker compose -f stateless-mcp-incident-lab-prd/demo/raw.compose.yaml down -v
+deploy: stateless-mcp-incident-lab-infrastructure

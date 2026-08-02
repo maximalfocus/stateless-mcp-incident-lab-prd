@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en-gb">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="canonical" href="https://simonwillison.net/2026/Jul/31/stateless-mcp/">
+<title>Stateless MCP has recaptured my interest (and inspired mcp-explorer and datasette-mcp)</title>
+<script defer data-domain="simonwillison.net" src="https://plausible.io/js/plausible.js"></script>
+<link rel="alternate" type="application/atom+xml" title="Atom" href="/atom/everything/">
+<link rel="stylesheet" type="text/css" href="/static/css/all.8f6d6562671f.css">
+<link rel="webmention" href="https://webmention.io/simonwillison.net/webmention">
+<link rel="pingback" href="https://webmention.io/simonwillison.net/xmlrpc">
+<meta name="author" content="Simon Willison">
+<meta property="og:site_name" content="Simon Willison’s Weblog">
+
+
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://raw.githubusercontent.com/simonw/til/refs/heads/main/llms/claude-add-custom-connector-dialog.webp">
+<meta name="twitter:creator" content="@simonw">
+<meta property="og:url" content="https://simonwillison.net/2026/Jul/31/stateless-mcp/">
+<meta property="og:title" content="Stateless MCP has recaptured my interest (and inspired mcp-explorer and datasette-mcp)">
+<meta property="og:image" content="https://raw.githubusercontent.com/simonw/til/refs/heads/main/llms/claude-add-custom-connector-dialog.webp">
+<meta property="og:type" content="article">
+<meta property="og:description" content="Tuesday was Stateless MCP day—the rollout of MCP 2.0, or the 2026-07-28 Model Context Protocol specification to use the more formal but less memorable name. This is the most significant …">
+<meta property="og:updated_time" content="1785539602">
+
+
+
+
+
+<script>
+(function() { // Apply theme immediately to prevent flash
+  const theme = localStorage.getItem('theme');
+  if (theme === 'light' || theme === 'dark') {
+    document.documentElement.setAttribute('data-theme', theme);
+  }
+})();
+</script>
+</head>
+<body class="smallhead">
+
+<div id="smallhead">
+  <div id="smallhead-inner">
+    <h1><a href="/">Simon Willison’s Weblog</a></h1>
+    <a id="smallhead-about" href="/about/#subscribe">Subscribe</a>
+  </div>
+</div><!-- #smallhead -->
+
+
+<div id="sponsored-banner" class="sponsor-scheme-sky">
+  <div id="sponsored-banner-inner">
+    <strong class="sponsored-label">Sponsored by:</strong> AWS &mdash; Move from SaaS to Agentic SaaS with resources for ISVs at every layer of the stack. <a class="sponsor-learn-more-label" href="https://fandf.co/4yrcF3h" rel="sponsored noopener" target="_blank">Explore how AI for ISVs turns vision into results</a>
+  </div>
+</div>
+
+
+<div id="wrapper">
+<div id="primary">
+
+<div class="entry entryPage">
+
+
+<div data-permalink-context="/2026/Jul/31/stateless-mcp/">
+<h2>Stateless MCP has recaptured my interest (and inspired mcp-explorer and datasette-mcp)</h2>
+<p class="mobile-date">31st July 2026</p>
+
+
+
+<p>Tuesday was <a href="https://x.com/ade_oshineye/status/2082129440943866149">Stateless MCP day</a>—the rollout of MCP 2.0, or <a href="https://blog.modelcontextprotocol.io/posts/2026-07-28/">the 2026-07-28 Model Context Protocol specification</a> to use the more formal but less memorable name. This is the most significant change to the MCP spec since it first launched, and has also served to reignite my personal interest in the protocol.</p>
+<p>For background: MCP is the Model Context Protocol, which describes a standard way to expose new tools to LLM-powered agent frameworks. It was introduced by Anthropic back <a href="https://www.anthropic.com/news/model-context-protocol">in November 2024</a>, had a <em>huge</em> spike of interest through much of 2025, and then became somewhat eclipsed by <a href="https://simonwillison.net/2025/Oct/16/claude-skills/">Skills</a> (another Anthropic invention) when it became apparent that an agent harness with access to a terminal and <code>curl</code> could do most of what MCP did in a more flexible way. I wrote about that <a href="https://simonwillison.net/2025/Dec/31/the-year-in-llms/#the-only-year-of-mcp">in my review of 2025</a>.</p>
+<p>I’m coming back around to MCP now. Giving an agent a shell environment with the ability to access the internet is <a href="https://simonwillison.net/2026/Jul/22/openai-cyberattack/">fraught with risk</a>, and requires a strong model that is capable of effectively driving such an environment. MCP tools are easier to audit and control, and simple enough that smaller models that run on a laptop can still drive them reasonably well.</p>
+<p>The new stateless MCP specification also greatly decreases the complexity of implementing both clients and servers for the protocol. I built three of those this week!</p>
+<h4 id="what-s-easier-with-stateless-mcp">What’s easier with stateless MCP</h4>
+<p>The best demonstration of the difference between stateful and stateless MCP is in this <a href="https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/">May 21st blog post</a> that introduced the RC for the new specification. It included a clear before-and-after example.</p>
+<p>The older stateful MCP (I’m going to call it “legacy MCP”) required two HTTP requests—the first to initialize a session and obtain a <code>Mcp-Session-Id</code>, and the second to actually call the tool:</p>
+<pre><code>POST /mcp HTTP/1.1
+Content-Type: application/json
+
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "initialize",
+  "params": {
+    "protocolVersion": "2025-11-25",
+    "capabilities": {
+    },
+    "clientInfo": {
+      "name": "my-app",
+      "version": "1.0"
+    }
+  }
+}
+
+POST /mcp HTTP/1.1
+Mcp-Session-Id: 1868a90c-3a3f-4f5b
+Content-Type: application/json
+
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/call",
+  "params": {
+    "name": "search",
+    "arguments": {
+      "q": "otters"
+    }
+  }
+}
+</code></pre>
+<p>The new stateless way uses a single HTTP request which looks like this:</p>
+<pre><code>POST /mcp HTTP/1.1
+MCP-Protocol-Version: 2026-07-28
+Mcp-Method: tools/call
+Mcp-Name: search
+Content-Type: application/json
+
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "search",
+    "arguments": {
+      "q": "otters"
+    },
+    "_meta": {
+      "io.modelcontextprotocol/clientInfo": {
+        "name": "my-app",
+        "version": "1.0"
+      }
+    }
+  }
+}
+</code></pre>
+<p>This is so much cleaner from both a client- and server-side implementation perspective. It’s also a better fit for building scalable web applications, since now you don’t need to maintain server-side state to keep track of those session IDs, or worry about routing the same session to the same backend machine.</p>
+<h4 id="mcp-explorer">mcp-explorer</h4>
+<p>I couldn’t find a great CLI tool for interactively probing an MCP server, so I had Codex help build my own.</p>
+<p><strong><a href="https://github.com/simonw/mcp-explorer">mcp-explorer</a></strong> is the result. It’s a stateless Python CLI tool, so you don’t even need to install it to try it out—it works with <a href="https://docs.astral.sh/uv/guides/tools/#running-tools">uvx</a> like this:</p>
+<div class="highlight highlight-source-shell"><pre>uvx mcp-explorer list https://agentic-mermaid.dev/mcp</pre></div>
+<p>This queries Ade Oshineye’s <a href="https://agentic-mermaid.dev/">agentic-mermaid.dev</a> demo MCP. The above command returns the following list of tools:</p>
+<pre><code>execute(code: string, timeoutMs?: integer) - Execute Mermaid SDK code
+  Run JavaScript in an isolated sandbox; return a value.
+
+describe_sdk(family: string, detail?: string) - Describe Mermaid SDK operations
+  Return version-matched mutation operations for one diagram family.
+
+render_svg(source: string, options?: object) - Render Mermaid as SVG
+  Render a Mermaid source string to themeable SVG. Returns { ok, svg }.
+
+render_ascii(source: string, useAscii?: boolean, targetWidth?: integer, options?: object) - Render Mermaid as text
+  Render a Mermaid source string to text. Returns { ok, text }.
+
+render_png(source: string, scale?: number, background?: string, fitTo?: object, options?: object) - Render Mermaid as PNG
+  Rasterize a Mermaid source string to PNG. Returns { ok, png_base64 }.
+...
+</code></pre>
+<p>Then to inspect a tool:</p>
+<div class="highlight highlight-source-shell"><pre>uvx mcp-explorer inspect render_svg</pre></div>
+<p>This outputs a whole bunch of information, including the JSON schema of the inputs and outputs.</p>
+<p>To call that tool and pass arguments to it:</p>
+<div class="highlight highlight-source-shell"><pre>uvx mcp-explorer call \
+  https://agentic-mermaid.dev/mcp \
+  render_svg \
+  -a <span class="pl-c1">source</span> <span class="pl-s"><span class="pl-pds">'</span>graph TD; A--&gt;B<span class="pl-pds">'</span></span> \
+  -a options <span class="pl-s"><span class="pl-pds">'</span>{"padding":24}<span class="pl-pds">'</span></span></pre></div>
+<p>Which returns:</p>
+<pre><code>{"ok":true,"svg":"&lt;svg xmlns=\"http://www.w3.org/2000/svg\" width=...
+</code></pre>
+<p>To get just the raw SVG try adding <code>| jq .svg -r</code> to that command. I got back <a href="https://gist.github.com/simonw/b07c62f0ce103be6932477659d5dd1ac">this image</a>:</p>
+<p><img src="https://static.simonwillison.net/static/2026/mermaid-example.svg" alt="SVG of as A box on top of a B box with an arrow from A to B" style="max-width: 100%;"></p>
+<p>There are a <a href="https://github.com/simonw/mcp-explorer/blob/main/README.md">few more commands</a> in the README, but you get the general idea. I find building CLI tools like this to be a really productive way to get familiar with a specification, even if an agent writes most of the actual code.</p>
+<h4 id="datasette-mcp">datasette-mcp</h4>
+<p>The second project is <strong><a href="https://github.com/datasette/datasette-mcp">datasette-mcp</a></strong>, a Datasette plugin which adds a <code>/-/mcp</code> endpoint to any Datasette instance.</p>
+<p>This is probably the fourth time I’ve tried building this plugin, but thanks to the new stateless MCP specification I finally have a version that feels good to release.</p>
+<p>It provides just three tools: <code>list_databases()</code>, <code>get_database_schema(database_name)</code>, and <code>execute_sql(database_name, sql)</code>. They do exactly what you would expect them to do—though <code>execute_sql()</code> is read-only for the moment.</p>
+<p>Wire these into an agent, or a chat tool like ChatGPT or Claude, and they’ll gain the ability to run SQL queries against your hosted Datasette instance.</p>
+<p>So far I’m running it on the Datasette mirror of my blog, at <a href="datasette.simonwillison.net/-/mcp">datasette.simonwillison.net/-/mcp</a>. It took a bit of fiddling to figure out how to attach that to ChatGPT and Claude, but I got there in the end. Here’s <a href="https://til.simonwillison.net/llms/mcp-in-claude-and-chatgpt">a new TIL</a> showing exactly how to do that.</p>
+<p>Here’s <a href="https://claude.ai/share/de1ad9bf-f7c2-4fb9-a9a0-2a1ae39995db">a shared Claude session</a> where I asked it:</p>
+<blockquote>
+<p><code>list tables in simonwillison.net</code></p>
+</blockquote>
+<p>And then:</p>
+<blockquote>
+<p><code>what has Simon said recently about MCP?</code></p>
+</blockquote>
+<p>It ran 7 separate SQL queries to figure out the answer.</p>
+<h4 id="llm-mcp-client">llm-mcp-client</h4>
+<p>My <a href="https://llm.datasette.io/">LLM tool</a> is long overdue for an official MCP integration. The new alpha <a href="https://github.com/simonw/llm-mcp-client">llm-mcp-client</a> plugin is my attempt at exactly that:</p>
+<div class="highlight highlight-source-shell"><pre>llm install llm-mcp-client
+llm -T <span class="pl-s"><span class="pl-pds">'</span>MCP("https://datasette.simonwillison.net/-/mcp")<span class="pl-pds">'</span></span> <span class="pl-s"><span class="pl-pds">'</span>count the notes<span class="pl-pds">'</span></span></pre></div>
+<p>Here’s the output (including reasoning trace, I’m using <a href="https://simonwillison.net/2026/Jul/30/llm-rc2/">LLM 0.32rc2</a>):</p>
+<blockquote>
+<p><em><strong>Considering note count</strong></em></p>
+<p><em>I see the question “count the notes” is probably asking me to tally up blog notes. It could also mean published notes or drafts, so there’s some ambiguity there. I’ll need to figure out the total number of notes, likely by querying the count for both published notes and drafts to get a clear answer. Let’s execute that count!</em></p>
+<p>There are <strong>151 notes</strong>.</p>
+</blockquote>
+<p>And <a href="https://gist.github.com/simonw/4e8f558766150658ce35eab4f0fc3e04">the output of llm logs</a> for that prompt.</p>
+<p>Once this is fully baked, I’m considering bringing it directly into LLM core. I’m excited to experiment with MCP in <a href="https://agent.datasette.io/">Datasette Agent</a> and <a href="https://github.com/simonw/llm-coding-agent">llm-coding-agent</a> as well.</p>
+<h4 id="mcp-is-a-safer-way-to-build-with-agents">MCP is a safer way to build with agents</h4>
+<p>A few months after MCP was first released, I wrote <a href="https://simonwillison.net/2025/Apr/9/mcp-prompt-injection/">Model Context Protocol has prompt injection security problems</a>, where I noted that the pattern of having end users mix and match tools pushed responsibility for avoiding data exfiltration attacks out to the users themselves. I hadn’t coined <a href="https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/">the Lethal Trifecta</a> yet, but that was absolutely what I had in mind.</p>
+<p>Then general agents with arbitrary shell and <code>curl</code> access came along, and that’s so much harder to keep secure!</p>
+<p>Something I’ve come to appreciate about MCP is that it’s much easier to reason about agent capabilities and what might go wrong than with arbitrary command execution in an open network environment—the default for most of today’s general and coding agent tools.</p>
+<p>I plan to lean into MCP a whole lot more when I’m building sensitive applications on top of LLMs.</p>
+
+
+</div>
+<div class="entryFooter">Posted <a href="/2026/Jul/31/">31st July 2026</a> at 11:13 pm &middot; Follow me on <a href="https://fedi.simonwillison.net/@simon">Mastodon</a>, <a href="https://bsky.app/profile/simonwillison.net">Bluesky</a>, <a href="https://twitter.com/simonw">Twitter</a> or <a href="https://simonwillison.net/about/#subscribe">subscribe to my newsletter</a></div>
+<p class="edit-page-link" data-admin-url="/admin/blog/entry/9405/" style="display: none;"></p>
+
+</div>
+
+
+<div class="recent-articles">
+<h2>More recent articles</h2>
+<ul class="bullets">
+  
+    <li><a href="/2026/Jul/22/openai-cyberattack/">OpenAI’s accidental cyberattack against Hugging Face is science fiction that happened</a> - 22nd July 2026</li>
+  
+    <li><a href="/2026/Jul/21/cat-and-thariq/">A Fireside Chat with Cat and Thariq from the Claude Code team</a> - 21st July 2026</li>
+  
+</ul>
+</div>
+
+
+
+</div> <!-- #primary -->
+
+<div id="secondary">
+
+<div class="metabox">
+<p class="this-is">This is <strong>Stateless MCP has recaptured my interest (and inspired mcp-explorer and datasette-mcp)</strong> by Simon Willison, posted on <a href="/2026/Jul/31/">31st July 2026</a>.</p>
+
+
+    
+        <a class="item-tag" href="/tags/projects/" rel="tag">
+            projects
+            <span>549</span>
+        </a>
+    
+        <a class="item-tag" href="/tags/ai/" rel="tag">
+            ai
+            <span>2,157</span>
+        </a>
+    
+        <a class="item-tag" href="/tags/datasette/" rel="tag">
+            datasette
+            <span>1,530</span>
+        </a>
+    
+        <a class="item-tag" href="/tags/mermaid/" rel="tag">
+            mermaid
+            <span>5</span>
+        </a>
+    
+        <a class="item-tag" href="/tags/generative-ai/" rel="tag">
+            generative-ai
+            <span>1,909</span>
+        </a>
+    
+        <a class="item-tag" href="/tags/llms/" rel="tag">
+            llms
+            <span>1,876</span>
+        </a>
+    
+        <a class="item-tag" href="/tags/llm/" rel="tag">
+            llm
+            <span>616</span>
+        </a>
+    
+        <a class="item-tag" href="/tags/anthropic/" rel="tag">
+            anthropic
+            <span>320</span>
+        </a>
+    
+        <a class="item-tag" href="/tags/model-context-protocol/" rel="tag">
+            model-context-protocol
+            <span>31</span>
+        </a>
+    
+
+
+
+
+<p><strong>Previous:</strong> <a href="/2026/Jul/22/openai-cyberattack/">OpenAI’s accidental cyberattack against Hugging Face is science fiction that happened</a></p>
+
+
+<section style="
+    /* .promo */
+    border-radius: 8px;
+    margin: 1.5rem 0;
+    padding: 1rem 1.25rem;
+    /* .variant-a */
+    border: 2px solid #6c3eb9;
+  ">
+  <h3 style="
+      /* h3 */
+      margin: 0 0 0.5rem;
+      font-size: 1.25rem;
+    ">
+    Monthly briefing
+  </h3>
+  <p style="
+      /* p */
+      margin: 0 0 1rem;
+      line-height: 1.4;
+    ">
+    Sponsor me for <strong>$10/month</strong> and get a curated email digest of the month's most important LLM developments.
+  </p>
+  <p style="
+      /* p */
+      margin: 0 0 1rem;
+      line-height: 1.4;
+    ">
+    Pay me to send you less!
+  </p>
+  <a href="https://github.com/sponsors/simonw/" style="
+      /* a.button */
+      display: inline-block;
+      padding: 0.5rem 1rem;
+      background: #6c3eb9;
+      color: #fff;
+      text-decoration: none;
+      border-radius: 4px;
+      font-weight: 600;
+    ">
+    Sponsor &amp; subscribe
+  </a>
+</section>
+</div>
+
+
+
+</div> <!-- #secondary -->
+</div> <!-- #wrapper -->
+
+
+
+
+
+
+
+
+
+
+
+<div id="ft">
+    <ul>
+      <li><a href="/about/#disclosures">Disclosures</a></li>
+      <li><a href="/about/#about-site">Colophon</a></li>
+      <li>&copy;</li>
+      <li><a href="/2002/">2002</a></li>
+      <li><a href="/2003/">2003</a></li>
+      <li><a href="/2004/">2004</a></li>
+      <li><a href="/2005/">2005</a></li>
+      <li><a href="/2006/">2006</a></li>
+      <li><a href="/2007/">2007</a></li>
+      <li><a href="/2008/">2008</a></li>
+      <li><a href="/2009/">2009</a></li>
+      <li><a href="/2010/">2010</a></li>
+      <li><a href="/2011/">2011</a></li>
+      <li><a href="/2012/">2012</a></li>
+      <li><a href="/2013/">2013</a></li>
+      <li><a href="/2014/">2014</a></li>
+      <li><a href="/2015/">2015</a></li>
+      <li><a href="/2016/">2016</a></li>
+      <li><a href="/2017/">2017</a></li>
+      <li><a href="/2018/">2018</a></li>
+      <li><a href="/2019/">2019</a></li>
+      <li><a href="/2020/">2020</a></li>
+      <li><a href="/2021/">2021</a></li>
+      <li><a href="/2022/">2022</a></li>
+      <li><a href="/2023/">2023</a></li>
+      <li><a href="/2024/">2024</a></li>
+      <li><a href="/2025/">2025</a></li>
+      <li><a href="/2026/">2026</a></li>
+      <li>
+        <button id="theme-toggle" type="button" aria-label="Toggle theme">
+          <!-- Auto/System icon (default) -->
+          <svg id="icon-auto" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10zm0-2V4a8 8 0 1 0 0 16z"/></svg>
+          <!-- Light icon -->
+          <svg id="icon-light" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" style="display:none"><path d="M12 18a6 6 0 1 1 0-12 6 6 0 0 1 0 12zm0-2a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM11 1h2v3h-2V1zm0 19h2v3h-2v-3zM3.515 4.929l1.414-1.414L7.05 5.636 5.636 7.05 3.515 4.93zM16.95 18.364l1.414-1.414 2.121 2.121-1.414 1.414-2.121-2.121zm2.121-14.85l1.414 1.415-2.121 2.121-1.414-1.414 2.121-2.121zM5.636 16.95l1.414 1.414-2.121 2.121-1.414-1.414 2.121-2.121zM23 11v2h-3v-2h3zM4 11v2H1v-2h3z"/></svg>
+          <!-- Dark icon -->
+          <svg id="icon-dark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" style="display:none"><path d="M10 7a7 7 0 0 0 12 4.9v.1c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2h.1A6.979 6.979 0 0 0 10 7zm-6 5a8 8 0 0 0 15.062 3.762A9 9 0 0 1 8.238 4.938 7.999 7.999 0 0 0 4 12z"/></svg>
+        </button>
+      </li>
+    </ul>
+</div>
+
+
+
+<style>image-gallery:not(:defined) img {max-height: 150px;} captioned-image-gallery:not(:defined) > figure {max-height: 240px; overflow: hidden;}</style>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('h2[id],h3[id],h4[id],h5[id],h6[id]').forEach(el => {
+    const id = el.getAttribute('id');
+    const permalinkContext = el.closest('[data-permalink-context]');
+    if (permalinkContext) {
+      const url = permalinkContext.getAttribute('data-permalink-context');
+      const hashLink = document.createElement('a');
+      hashLink.style.borderBottom = 'none';
+      hashLink.style.color = '#666';
+      hashLink.style.fontSize = '1em';
+      hashLink.style.opacity = 0.8;
+      hashLink.setAttribute('href', url + '#' + id);
+      hashLink.innerText = '#';
+      el.appendChild(document.createTextNode('\u00A0'));
+      el.appendChild(hashLink);
+    }
+  });
+});
+</script>
+<script type="module">
+const config = [
+  {"tag": "lite-youtube", "js": "/static/lite-yt-embed.js", "css": "/static/lite-yt-embed.css"},
+  {"tag": "image-gallery", "js": "/static/image-gallery.js", "css": null},
+  {"tag": "captioned-image-gallery", "js": "/static/captioned-image-gallery.js", "css": null},
+  {"tag": "click-to-play", "js": "/static/click-to-play.js", "css": "/static/click-to-play.css"},
+  {"tag": "github-code", "js": "/static/github-code.js", "css": null}
+];
+for (const {tag, js, css} of config) {
+  if (document.querySelector(tag)) {
+    if (css) {
+      document.head.appendChild(
+        Object.assign(document.createElement('link'), {
+          rel: 'stylesheet',
+          href: css
+        })
+      );
+    }
+    if (js) {
+      await import(js);
+    }
+  }
+}
+</script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    if (window.localStorage.getItem('ADMIN')) {
+      document.querySelectorAll('.edit-page-link').forEach(el => {
+        const url = el.getAttribute('data-admin-url');
+        if (url) {
+          const a = document.createElement('a');
+          a.href = url;
+          a.className = 'edit-link';
+          a.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg> Edit';
+          el.appendChild(a);
+          el.style.display = 'block';
+        }
+      });
+    }
+  });
+</script>
+<script>
+// Random tag navigation - shows button if recently came from tag random
+(function() {
+  const stored = localStorage.getItem('random_tag');
+  if (!stored) return;
+
+  try {
+    const data = JSON.parse(stored);
+    const elapsed = Date.now() - data.timestamp;
+
+    // Only show if within 5 seconds
+    if (elapsed > 5000) return;
+
+    const header = document.getElementById('smallhead-inner');
+    if (!header) return;
+
+    const btn = document.createElement('a');
+    btn.href = '/random/' + encodeURIComponent(data.tag) + '/';
+    btn.className = 'random-tag-nav';
+    btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none"></circle><circle cx="15.5" cy="8.5" r="1.5" fill="currentColor" stroke="none"></circle><circle cx="8.5" cy="15.5" r="1.5" fill="currentColor" stroke="none"></circle><circle cx="15.5" cy="15.5" r="1.5" fill="currentColor" stroke="none"></circle><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"></circle></svg> Random ' + data.tag;
+
+    btn.addEventListener('click', function(e) {
+      // Bump the timestamp before navigating
+      localStorage.setItem('random_tag', JSON.stringify({
+        tag: data.tag,
+        timestamp: Date.now()
+      }));
+    });
+
+    // Insert before the Subscribe link
+    const subscribeLink = document.getElementById('smallhead-about');
+    if (subscribeLink) {
+      header.insertBefore(btn, subscribeLink);
+    } else {
+      header.appendChild(btn);
+    }
+  } catch (e) {
+    // Invalid JSON, clear it
+    localStorage.removeItem('random_tag');
+  }
+})();
+</script>
+<script>
+// Theme toggle functionality
+(function() {
+  const toggle = document.getElementById('theme-toggle');
+  const iconAuto = document.getElementById('icon-auto');
+  const iconLight = document.getElementById('icon-light');
+  const iconDark = document.getElementById('icon-dark');
+
+  // Theme states: 'auto' (default), 'light', 'dark'
+  function getTheme() {
+    return localStorage.getItem('theme') || 'auto';
+  }
+
+  function setTheme(theme) {
+    if (theme === 'auto') {
+      localStorage.removeItem('theme');
+      document.documentElement.removeAttribute('data-theme');
+    } else {
+      localStorage.setItem('theme', theme);
+      document.documentElement.setAttribute('data-theme', theme);
+    }
+    updateIcon(theme);
+  }
+
+  function updateIcon(theme) {
+    iconAuto.style.display = theme === 'auto' ? 'block' : 'none';
+    iconLight.style.display = theme === 'light' ? 'block' : 'none';
+    iconDark.style.display = theme === 'dark' ? 'block' : 'none';
+
+    // Update aria-label for accessibility
+    const labels = {
+      'auto': 'Theme: Auto (system preference). Click to switch to light.',
+      'light': 'Theme: Light. Click to switch to dark.',
+      'dark': 'Theme: Dark. Click to switch to auto.'
+    };
+    toggle.setAttribute('aria-label', labels[theme]);
+  }
+
+  // Cycle through themes: auto -> light -> dark -> auto
+  function cycleTheme() {
+    const current = getTheme();
+    const next = current === 'auto' ? 'light' : current === 'light' ? 'dark' : 'auto';
+    setTheme(next);
+  }
+
+  // Initialize
+  updateIcon(getTheme());
+  toggle.addEventListener('click', cycleTheme);
+})();
+</script>
+</body>
+</html>
