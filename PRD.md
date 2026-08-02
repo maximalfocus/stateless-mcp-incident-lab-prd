@@ -242,7 +242,7 @@ AWS CDK provisions:
 - ECR repositories for immutable raw and SDK images;
 - an ECS Fargate service per server realization, each with at least two tasks;
 - an internet-facing ALB routing `/raw/mcp` and `/sdk/mcp` to separate target groups;
-- AWS WAF rate-based protection, strict security groups, and TLS where a temporary certificate/domain is available;
+- AWS WAF rate-based protection, strict security groups, and a mandatory HTTPS listener using a temporary certificate/domain; deployment hard-stops rather than exposing a public plaintext listener when those prerequisites are unavailable;
 - Secrets Manager material for MRTR state integrity;
 - CloudWatch logs and metrics;
 - required project/environment/owner tags.
@@ -251,7 +251,7 @@ The deployment uses the authenticated `cc-sandbox` profile interactively. Creden
 
 ## Security posture
 
-The initial endpoint is unauthenticated to keep the project focused on the stateless core. It contains only synthetic shared data and simulated effects. The cloud environment is deployed only for acceptance and torn down immediately afterward. WAF rate limiting, bounded request sizes, timeouts, least-privilege IAM, origin validation, schema complexity bounds, safe header encoding, output sanitization, and dependency scanning remain required. For `resources/read`, the required `Mcp-Name` mirror carries the incident resource URI—and therefore its bearer handle—through Nginx and the ALB; TLS protects transit, and proxy, access, and application logging configurations must redact or omit that header and the corresponding body field.
+The initial endpoint is unauthenticated to keep the project focused on the stateless core. It contains only synthetic shared data and simulated effects. The cloud environment is deployed only for acceptance and torn down immediately afterward. WAF rate limiting, bounded request sizes, timeouts, least-privilege IAM, origin validation, schema complexity bounds, safe header encoding, output sanitization, and dependency scanning remain required. For `resources/read`, the required `Mcp-Name` mirror carries the incident resource URI—and therefore its bearer handle—through Nginx and the ALB. TLS is mandatory for public transit, and Nginx, ALB/WAF access, and application logging configurations must omit or redact the mirrored header and corresponding body field.
 
 This is a deliberate learning boundary, not a claim that unauthenticated remote MCP is production-ready or fully conforms to elicitation's identity-binding security requirement. OAuth issuer validation, Client ID Metadata Documents, authorization-context cache isolation, authenticated-principal binding, and user-bound handles belong in a later plan.
 
