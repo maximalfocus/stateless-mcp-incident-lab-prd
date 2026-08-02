@@ -190,7 +190,7 @@ incident-mcp demo <url> [--approve|--decline|--cancel]
 1. MCP transport context is never inferred from a connection, process, cookie, source IP, prior request, or replica.
 2. Protocol version and client capabilities are evaluated independently on every request.
 3. No response creates, returns, or relies on `Mcp-Session-Id`; GET or DELETE to an MCP endpoint returns HTTP 405, and `Last-Event-ID` is ignored.
-4. Incident continuity uses only explicit opaque handles supplied in request arguments. Because the endpoint is unauthenticated, those handles are bearer tokens: they are high-entropy (UUIDv4 or stronger), unguessable, and TTL-bounded.
+4. Incident continuity uses only explicit opaque handles supplied in request arguments or an incident resource URI. Because the endpoint is unauthenticated, those handles are bearer tokens: they are high-entropy (UUIDv4 or stronger), unguessable, TTL-bounded, and redacted wherever request data is logged.
 5. Tool, prompt, and resource lists are deterministic when their underlying sets are unchanged.
 6. Every mirrored HTTP header must match its body source whenever that body field is present; mismatches, and missing or malformed required headers, return HTTP 400 and JSON-RPC `-32020`.
 7. Unsupported protocol versions return HTTP 400 and `-32022` with supported versions.
@@ -223,7 +223,7 @@ Each pair runs discovery, catalog reads, resource/prompt retrieval, an incident 
 | Reliability | Zero duplicate simulated remediation effects under 20 concurrent retries of one accepted MRTR state |
 | Performance | After warm-up, catalog requests at 10 requests/s achieve p95 ≤ 750 ms and error rate < 1% locally and in AWS |
 | Security | Origin validation, schema validation, header/body validation, requestState integrity/expiry, dependency audit with no unsuppressed high/critical findings, no real remediation |
-| Observability | Structured JSON logs include method, name, request ID, replica, latency, result type, trace ID, and no unredacted requestState or elicitation content |
+| Observability | Structured JSON logs include method, name (redacted when it contains a bearer handle), request ID, replica, latency, result type, and trace ID; no log contains an unredacted incident handle, requestState, or elicitation content |
 | Portability | Node.js 24 LTS; local workflow runs on Docker Compose; cloud stack targets `ap-southeast-1` by default |
 | Test quality | 100% statement and branch coverage for protocol codecs/validators; mutation score ≥ 90% for raw protocol core |
 | Cost/lifecycle | AWS environment is ephemeral and `cdk destroy` is part of acceptance; actual cost is measured and disclosed rather than guaranteed |
@@ -251,7 +251,7 @@ The deployment uses the authenticated `cc-sandbox` profile interactively. Creden
 
 ## Security posture
 
-The initial endpoint is unauthenticated to keep the project focused on the stateless core. It contains only synthetic shared data and simulated effects. The cloud environment is deployed only for acceptance and torn down immediately afterward. WAF rate limiting, bounded request sizes, timeouts, least-privilege IAM, origin validation, schema complexity bounds, safe header encoding, output sanitization, and dependency scanning remain required.
+The initial endpoint is unauthenticated to keep the project focused on the stateless core. It contains only synthetic shared data and simulated effects. The cloud environment is deployed only for acceptance and torn down immediately afterward. WAF rate limiting, bounded request sizes, timeouts, least-privilege IAM, origin validation, schema complexity bounds, safe header encoding, output sanitization, and dependency scanning remain required. For `resources/read`, the required `Mcp-Name` mirror carries the incident resource URI—and therefore its bearer handle—through Nginx and the ALB; TLS protects transit, and proxy, access, and application logging configurations must redact or omit that header and the corresponding body field.
 
 This is a deliberate learning boundary, not a claim that unauthenticated remote MCP is production-ready or fully conforms to elicitation's identity-binding security requirement. OAuth issuer validation, Client ID Metadata Documents, authorization-context cache isolation, authenticated-principal binding, and user-bound handles belong in a later plan.
 

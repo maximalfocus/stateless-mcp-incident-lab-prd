@@ -55,7 +55,7 @@ The raw and SDK implementations are declared in `implementations/*.manifest`. Ea
 | 11 | `interoperability/` | `contract` | Raw→raw, raw→SDK, SDK→raw, SDK→SDK workflows and equivalent observables | 12 | 5–10 | Critical |
 | 12 | `properties/` | `property` | Header encode/decode round trip, cache-key stability, deterministic ordering, request-state tamper rejection, replica-independence | 7 | 1–9 | High |
 | 13 | `security/` | `http`, `lint-assertion` | Origin rebinding defense, malformed/unbounded schemas, header injection, request size/time bounds, output/state redaction, simulated-only actions | 12 | 3,5–8 | Critical |
-| 14 | `observability/` | `http`, `trace-span` | Health, structured logs, W3C trace context in `_meta`, method/name/replica/result metrics, sensitive-field absence | 7 | 3,6 | Medium |
+| 14 | `observability/` | `http`, `trace-span` | Health, structured logs, W3C trace context in `_meta`, method/name/replica/result metrics, bearer-handle/header/body redaction, other sensitive-field absence | 7 | 3,6 | Medium |
 | 15 | `performance/` | `metric-assertion` | Warm p95/error target, 100-request two-replica distribution, concurrent MRTR idempotency | 3 | 7,8,11 | High |
 | 16 | `architecture/` | `lint-assertion`, `decision-record` | Mandatory dependency direction and boundaries; raw repo cannot import MCP SDK; domain cannot import transport/persistence | 6 | — | High |
 | 17 | `infra/` | `function` | CDK assertions for encryption, TTL, least-privilege IAM/SG, ≥2 tasks, health checks, WAF rate rule, MRTR signing secret sourced from Secrets Manager and absent from plaintext task definitions, tags, log retention, scripted deploy→verify→destroy ordering, destroyability | 10 | 3,13–15 | High |
