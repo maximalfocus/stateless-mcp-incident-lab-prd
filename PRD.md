@@ -95,7 +95,7 @@ Every request carries its protocol metadata in the request `params._meta` object
 
 MRTR retry fields (`inputResponses`, `requestState`) are also request `params`, sibling to `name`/`arguments`, not tool arguments.
 
-The client implements Base64 sentinel encoding for non-header-safe `Mcp-Name` and `Mcp-Param-*` values, and excludes from its `tools/list` result any tool whose `x-mcp-header` annotation violates the specification's constraints. The server validates header/body equality case-insensitively for header names and case-sensitively for values.
+The client implements Base64 sentinel encoding for non-header-safe `Mcp-Name` and `Mcp-Param-*` values, omits an `Mcp-Param-*` header when the annotated argument is absent from the call, and excludes from its `tools/list` result any tool whose `x-mcp-header` annotation violates the specification's constraints. The server validates header/body equality case-insensitively for header names and case-sensitively for values, and never expects an `Mcp-Param-*` header for an argument the request body does not carry.
 
 ### Discovery
 
@@ -127,7 +127,7 @@ All tools have JSON Schema 2020-12 input and output schemas. Structured results 
 - `incident://topology/services` — stable fictional service map.
 - `incident://runbooks/{service_id}` — versioned runbook markdown.
 - `incident://incidents/{incident_id}/timeline` — incident-specific telemetry timeline.
-- `resources/list`, `resources/templates/list`, and `resources/read` use deterministic ordering and appropriate cache hints.
+- `resources/list`, `resources/templates/list`, and `resources/read` use deterministic ordering and pinned cache hints: `public` for the static topology and runbook resources, `private` for incident-scoped reads whose handle is a bearer token.
 - Unknown resources return `-32602`; they never return an ambiguous empty `contents` array.
 
 Every list operation (`tools/list`, `prompts/list`, `resources/list`, `resources/templates/list`) may be paginated. Page size is the server's choice, `nextCursor` is opaque to the client, the client follows cursors to completion without inferring meaning from their value, the cursor is part of the client cache key, and every page of one list carries the same `cacheScope`. An invalid cursor returns `-32602`.
@@ -192,10 +192,10 @@ incident-mcp demo <url> [--approve|--decline|--cancel]
 3. No response creates, returns, or relies on `Mcp-Session-Id`; GET or DELETE to an MCP endpoint returns HTTP 405, and `Last-Event-ID` is ignored.
 4. Incident continuity uses only explicit opaque handles supplied in request arguments. Because the endpoint is unauthenticated, those handles are bearer tokens: they are high-entropy (UUIDv4 or stronger), unguessable, and TTL-bounded.
 5. Tool, prompt, and resource lists are deterministic when their underlying sets are unchanged.
-6. Every mirrored HTTP header must match its body source; mismatches, and missing or malformed required headers, return HTTP 400 and JSON-RPC `-32020`.
+6. Every mirrored HTTP header must match its body source whenever that body field is present; mismatches, and missing or malformed required headers, return HTTP 400 and JSON-RPC `-32020`.
 7. Unsupported protocol versions return HTTP 400 and `-32022` with supported versions.
 8. Missing required client capability returns HTTP 400 and `-32021`.
-9. Missing methods return HTTP 404 and `-32601`; a request missing a required `params._meta` field returns HTTP 400 and `-32602`; other malformed requests use the applicable JSON-RPC standard code.
+9. Missing methods return HTTP 404 and `-32601`; a request missing a required `params._meta` field returns HTTP 400 and `-32602` even when a mirrored header carries that value, so a missing body field is never reported as a header mismatch; other malformed requests use the applicable JSON-RPC standard code.
 10. An invalid `Origin` returns HTTP 403. Local servers bind to localhost unless running inside the isolated Compose network.
 11. Remediation effects are fictional, reviewable, and conditionally written at most once.
 12. A declined or cancelled elicitation never applies remediation.

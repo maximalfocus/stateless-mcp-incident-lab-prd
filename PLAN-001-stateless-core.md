@@ -46,10 +46,10 @@ The raw and SDK implementations are declared in `implementations/*.manifest`. Ea
 | 2 | `versioning/` | `http` | Required per-request `_meta`; unsupported version retry; required capabilities; no handshake/session inference | 10 | 1 | High |
 | 3 | `transport/` | `http`, `sse` | POST endpoint, Accept/content types, required mirrored headers, Base64 sentinel encoding, `x-mcp-header`, mismatch errors, Origin, GET/DELETE rejection | 18 | 1,2 | High |
 | 4 | `discovery/` | `http` | Mandatory `server/discover`, capabilities, identity, instructions, cache hints, direct-call-without-discovery | 6 | 1–3 | Medium |
-| 5 | `primitives/` | `http`, `tool-call` | Deterministic list/get/read/call for tools, resources, templates, prompts; schemas, structured output, error split | 20 | 1–4 | High |
+| 5 | `primitives/` | `http`, `tool-call` | Deterministic list/get/read/call for tools, resources, templates, prompts; opaque-cursor pagination followed to completion, server-chosen page size, invalid cursor `-32602`; schemas, structured output, error split | 20 | 1–4 | High |
 | 6 | `incidents/` | `state-machine`, `http` | Explicit opaque handles, incident transitions, diagnostics, proposals, expiry, conditional at-most-once remediation | 12 | 5 | High |
 | 7 | `mrtr/` | `tool-call` | `input_required`, capability check, form elicitation, new retry ID, exact state echo, accept/decline/cancel, signed state tamper/expiry/binding, cross-replica retry | 16 | 2,5,6 | Critical |
-| 8 | `streaming/` | `sse` | Request-scoped progress, monotonic token updates, final response and close, disconnect cancellation, no post-completion events, broken-stream reissue with a new request ID | 9 | 3,6 | High |
+| 8 | `streaming/` | `sse` | Request-scoped progress, monotonic token updates, final response and close, disconnect cancellation, no post-completion events, non-buffered SSE response headers, broken-stream reissue with a new request ID | 9 | 3,6 | High |
 | 9 | `cache/` | `function`, `http` | Mandatory hints, key method+params+cursor, TTL freshness, public/private scope, no MRTR caching, stale-on-error warning, deterministic pages | 10 | 4,5,7 | Medium |
 | 10 | `cli/` | `cli` | Equivalent commands, JSON stdout/stderr separation, exit codes, wire redaction, inspect/call, cache bypass, interactive MRTR actions | 14 | 3–9 | High |
 | 11 | `interoperability/` | `contract` | Raw→raw, raw→SDK, SDK→raw, SDK→SDK workflows and equivalent observables | 12 | 5–10 | Critical |
