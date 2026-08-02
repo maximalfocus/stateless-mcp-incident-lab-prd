@@ -151,7 +151,7 @@ These receive no golden files in PLAN-001.
 | MRTR integrity | Tamper, expiry, wrong-call reuse rejected; state redacted | `mrtr`, `security` | tool-call/http | MRTR negative suite + log assertions |
 | Dependency safety | No unsuppressed high/critical known CVEs | `dependencies` | function | `npm audit --audit-level=high`; dated expiring suppressions only |
 | Observability | Required structured fields and W3C trace propagation | `observability` | http/trace-span | log capture + trace goldens |
-| Local reproducibility | One Compose command reaches healthy full matrix | acceptance demo | structural-contract | `demo/*.compose.yaml up -d --wait` + DEMO scenario |
+| Local reproducibility | One Compose command reaches healthy full matrix | acceptance demo | structural-contract | `docker compose -f demo/matrix.compose.yaml up -d --wait` + DEMO scenario |
 | Cloud teardown | Stack destroy succeeds and inventory is empty | `infra`, acceptance | function | CDK assertions + post-destroy AWS inventory |
 | Cost | Measured after ephemeral run | acceptance report | documentation-contract | AWS Cost Explorer value, or `unverified (disclosed)` if billing data is delayed |
 

@@ -77,7 +77,7 @@ flowchart LR
     R1 & R2 & S1 & S2 --> OBS[JSON logs / traces]
 ```
 
-The endpoint paths distinguish implementations (`/raw/mcp` and `/sdk/mcp`); replicas behind each path are interchangeable. Every response includes a non-security `_meta.io.modelcontextprotocol/serverInfo` plus a diagnostic replica identifier carried under a non-reserved vendor `_meta` prefix, so acceptance tests can prove distribution. No behavior may depend on that identifier.
+The endpoint paths distinguish implementations (`/raw/mcp` and `/sdk/mcp`); replicas behind each path are interchangeable. Every successful result includes `_meta.io.modelcontextprotocol/serverInfo` plus a diagnostic replica identifier under a non-reserved vendor `_meta` prefix, so acceptance tests can prove distribution. JSON-RPC error responses have no result `_meta`; their replica identity is observable only in structured server logs. No protocol behavior may depend on that identifier.
 
 ## MCP surface
 
