@@ -42,7 +42,7 @@ The raw and SDK implementations are declared in `implementations/*.manifest`. Ea
 
 | # | Category | Boundary | Key behaviors | Est. tests | Deps | Risk |
 |---|---|---|---|---:|---|---|
-| 1 | `protocol/` | `function` | JSON-RPC request/result/error/notification shapes; IDs; `resultType`; standard and reserved errors; JSON Schema dialect handling | 12 | — | High |
+| 1 | `protocol/` | `function` | JSON-RPC request/result/error/notification shapes; IDs; `resultType`; standard and reserved errors; JSON Schema dialect handling, refused network `$ref` dereferencing, bounded composition keywords | 12 | — | High |
 | 2 | `versioning/` | `http` | Required per-request `_meta`; unsupported version retry; required capabilities; no handshake/session inference | 10 | 1 | High |
 | 3 | `transport/` | `http`, `sse` | POST endpoint, Accept/content types, required mirrored headers, Base64 sentinel encoding, `x-mcp-header`, mismatch errors, Origin, GET/DELETE rejection | 18 | 1,2 | High |
 | 4 | `discovery/` | `http` | Mandatory `server/discover`, capabilities, identity, instructions, cache hints, direct-call-without-discovery | 6 | 1–3 | Medium |

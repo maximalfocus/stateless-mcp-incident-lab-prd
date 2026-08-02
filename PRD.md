@@ -120,7 +120,7 @@ Clients may invoke another RPC without discovery and recover from `UnsupportedPr
 | `execute_remediation` | `incident_id`, `remediation_id` | Uses MRTR form elicitation; accepted retry executes once, decline/cancel has no effect |
 | `resolve_incident` | `incident_id`, summary | Performs a valid terminal transition |
 
-All tools have JSON Schema 2020-12 input and output schemas. Structured results are validated and duplicated as text for compatibility. Unknown tools and malformed protocol inputs use JSON-RPC errors; domain failures use `isError: true` tool results.
+All tools have JSON Schema 2020-12 input and output schemas; validators never dereference a `$ref` that resolves to a network URI and enforce bounded schema depth and subschema count. Structured results are validated and duplicated as text for compatibility. Unknown tools and malformed protocol inputs use JSON-RPC errors; domain failures use `isError: true` tool results.
 
 ### Resources
 

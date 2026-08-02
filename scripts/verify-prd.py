@@ -147,9 +147,13 @@ sums = ROOT / "sources" / "SHA256SUMS"
 if not sums.is_file():
     fail("missing sources/SHA256SUMS")
 else:
+    listed: set[str] = set()
     for line in sums.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
         expected, rel = line.split(maxsplit=1)
         rel = rel.lstrip("*")
+        listed.add(rel)
         captured = ROOT / rel
         if not captured.is_file():
             fail(f"checksum target missing: {rel}")
@@ -157,6 +161,12 @@ else:
         actual = hashlib.sha256(captured.read_bytes()).hexdigest()
         if actual != expected:
             fail(f"checksum mismatch: {rel}")
+    # Every captured byte is hashed: an unlisted capture must not pass silently.
+    for path in sorted((ROOT / "sources").rglob("*")):
+        if path.is_file() and path != sums:
+            rel = str(path.relative_to(ROOT))
+            if rel not in listed:
+                fail(f"captured source absent from SHA256SUMS: {rel}")
 
 # Agent-wrapper leakage is never valid as a standalone line.
 leak = re.compile(r"^\s*</(content|invoke|parameter)>\s*$", re.MULTILINE)
