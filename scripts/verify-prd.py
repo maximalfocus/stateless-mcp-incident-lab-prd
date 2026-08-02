@@ -48,7 +48,8 @@ def table_rows(body: str) -> list[list[str]]:
 prd = text("PRD.md")
 plan = text("PLAN-001-stateless-core.md")
 index = text("PLAN.md")
-charter = text("PROBLEM.md")
+if (ROOT / "PROBLEM.md").exists():
+    fail("retired peerreview control file present: PROBLEM.md")
 
 for heading in [
     "Overview", "User model", "Domain and data model", "MCP surface",
@@ -167,11 +168,6 @@ for path in ROOT.rglob("*"):
             continue
         if leak.search(body):
             fail(f"leaked agent wrapper tag: {path.relative_to(ROOT)}")
-
-# Charter must govern the review rather than merely describe it.
-for heading in ["Problem", "Scope", "Non-goals", "Acceptance criteria", "Verification", "Residuals"]:
-    if not re.search(rf"^## {re.escape(heading)}\s*$", charter, re.MULTILINE):
-        fail(f"PROBLEM missing charter heading: {heading}")
 
 if errors:
     print("FAIL: PRD verification")
