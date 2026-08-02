@@ -95,7 +95,7 @@ Every request carries its protocol metadata in the request `params._meta` object
 
 MRTR retry fields (`inputResponses`, `requestState`) are also request `params`, sibling to `name`/`arguments`, not tool arguments.
 
-The client implements Base64 sentinel encoding for non-header-safe `Mcp-Name` and `Mcp-Param-*` values, omits an `Mcp-Param-*` header when the annotated argument is absent from the call, and excludes from its `tools/list` result any tool whose `x-mcp-header` annotation violates the specification's constraints. The server validates header/body equality case-insensitively for header names and case-sensitively for values, and never expects an `Mcp-Param-*` header for an argument the request body does not carry.
+The client implements Base64 sentinel encoding for non-header-safe `Mcp-Name` and `Mcp-Param-*` values, omits an `Mcp-Param-*` header when the annotated argument is absent from the call or carries the value `null`, and excludes from its `tools/list` result any tool whose `x-mcp-header` annotation violates the specification's constraints. The server validates header/body equality case-insensitively for header names and case-sensitively for values, and never expects an `Mcp-Param-*` header for an argument the request body omits or carries as `null`.
 
 ### Discovery
 
@@ -120,7 +120,7 @@ Clients may invoke another RPC without discovery and recover from `UnsupportedPr
 | `execute_remediation` | `incident_id`, `remediation_id` | Uses MRTR form elicitation; accepted retry executes once, decline/cancel has no effect |
 | `resolve_incident` | `incident_id`, summary | Performs a valid terminal transition |
 
-All tools have JSON Schema 2020-12 input and output schemas; validators never dereference a `$ref` that resolves to a network URI and enforce bounded schema depth and subschema count. Structured results are validated and duplicated as text for compatibility. Unknown tools and malformed protocol inputs use JSON-RPC errors; domain failures use `isError: true` tool results.
+All tools have JSON Schema 2020-12 input and output schemas; validators never dereference a `$ref` that resolves to a network URI and enforce bounded schema depth and subschema count. Structured results are validated and duplicated as text for compatibility. Unknown tools and malformed protocol inputs use JSON-RPC `-32602` errors—never `-32601`, which is reserved for an unimplemented RPC method; domain failures use `isError: true` tool results.
 
 ### Resources
 
@@ -136,7 +136,7 @@ Every list operation (`tools/list`, `prompts/list`, `resources/list`, `resources
 
 - `triage_incident(incident_id)` — user-controlled prompt containing investigation instructions and links to relevant resources.
 - `review_remediation(incident_id, remediation_id)` — user-controlled prompt for reviewing evidence before execution.
-- `prompts/list` is deterministic and cacheable; `prompts/get` validates required arguments.
+- `prompts/list` is deterministic and cacheable; `prompts/get` validates required arguments and returns `-32602` for an unknown prompt name or a missing required argument.
 
 ### MRTR elicitation
 
@@ -193,14 +193,14 @@ incident-mcp demo <url> [--approve|--decline|--cancel]
 4. Incident continuity uses only explicit opaque handles supplied in request arguments or an incident resource URI. Because the endpoint is unauthenticated, those handles are bearer tokens: they are high-entropy (UUIDv4 or stronger), unguessable, TTL-bounded, and redacted wherever request data is logged.
 5. Tool, prompt, and resource lists are deterministic when their underlying sets are unchanged.
 6. Every mirrored HTTP header must match its body source whenever that body field is present; mismatches, and missing or malformed required headers, return HTTP 400 and JSON-RPC `-32020`.
-7. Unsupported protocol versions return HTTP 400 and `-32022` with supported versions.
-8. Missing required client capability returns HTTP 400 and `-32021`, whose `data.requiredCapabilities` lists the capabilities the request needed.
-9. Missing methods return HTTP 404 and `-32601`; a request missing a required `params._meta` field returns HTTP 400 and `-32602` even when a mirrored header carries that value, so a missing body field is never reported as a header mismatch; other malformed requests use the applicable JSON-RPC standard code.
-10. An invalid `Origin` returns HTTP 403. Local servers bind to localhost unless running inside the isolated Compose network.
+7. Unsupported protocol versions return HTTP 400 and `-32022`, whose required `data.supported` lists the versions the server accepts and whose required `data.requested` echoes the rejected version.
+8. Missing required client capability returns HTTP 400 and `-32021`, whose `data.requiredCapabilities` is a `ClientCapabilities` object—not an array of capability names—declaring the capabilities the request needed. Where captured specification prose instead says "missing capabilities", the captured `schema.ts` governs.
+9. Missing methods return HTTP 404 and `-32601`; a request missing a required `params._meta` field returns HTTP 400 and `-32602` even when a mirrored header carries that value, so a missing body field is never reported as a header mismatch; other malformed requests use the applicable JSON-RPC standard code (`-32700`, `-32600`, or `-32602`). Every JSON-RPC error response whose HTTP status these rules do not pin elsewhere returns HTTP 400.
+10. An invalid `Origin` returns HTTP 403. The 403 and 405 responses are transport-level rejections carrying no JSON-RPC body, so no error code is allocated for either; every 405 includes `Allow: POST`. Only the 413 and 504 responses carry an application-defined error envelope. Local servers bind to localhost unless running inside the isolated Compose network.
 11. Remediation effects are fictional, reviewable, and conditionally written at most once.
 12. A declined or cancelled elicitation never applies remediation.
 13. Both raw and SDK realizations must produce equivalent observable behavior; implementation-specific metadata may differ only where explicitly allowed.
-14. A request exceeding the configured body limit returns HTTP 413 with application-defined JSON-RPC error `-31999`; server work that exceeds its request deadline before any response stream has begun returns HTTP 504 with application-defined error `-31998`. Both codes are outside the reserved `-32768`–`-32000` range; implementations never emit an undefined `-32020`–`-32099` code. Both responses require `Content-Type: application/json`. Because this revision forbids a `null` ID, any error response whose originating ID could not be read — including the 403, 405, and 413 cases and unparseable bodies — omits the `id` member entirely; every other error response, including the 504, echoes the originating request `id`. Neither response includes result `_meta` nor leaves a partial tool effect. When a deadline is exceeded after an SSE response stream has already begun, the server closes the stream as the cancellation signal and the client reissues under the lost-stream rule above.
+14. A request exceeding the configured body limit returns HTTP 413 with application-defined JSON-RPC error `-31999`; server work that exceeds its request deadline before any response stream has begun returns HTTP 504 with application-defined error `-31998`. Both codes are outside the reserved `-32768`–`-32000` range; implementations never emit an undefined `-32020`–`-32099` code. Both responses require `Content-Type: application/json`. Because this revision's request ID is a string or a number and a `null` ID is forbidden, any error response whose originating ID could not be read, or was read but is not a valid request ID — including the 413 case (size enforcement counts and discards bytes without parsing a partial body), unparseable bodies, and a request whose `id` is absent, `null`, or non-scalar — omits the `id` member entirely; every other error response, including the 504, echoes the originating request `id`. Neither response includes result `_meta` nor leaves a partial tool effect. When a deadline is exceeded after an SSE response stream has already begun, the server closes the stream as the cancellation signal and the client reissues under the lost-stream rule above.
 15. Overlapping request failures use this precedence: invalid `Origin` → unsupported HTTP method → body too large → malformed JSON/JSON-RPC shape → missing required `params._meta` fields → mirrored header/body mismatch or missing/malformed required header → unsupported protocol version → missing required capability → unknown JSON-RPC method → domain validation. The response deadline applies only after those synchronous checks. This preserves the rule that a missing body metadata field is never misreported as a header mismatch.
 
 ## Interoperability and acceptance
