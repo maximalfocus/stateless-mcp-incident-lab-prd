@@ -43,8 +43,8 @@ The raw and SDK implementations are declared in `implementations/*.manifest`. Ea
 | # | Category | Boundary | Key behaviors | Est. tests | Deps | Risk |
 |---|---|---|---|---:|---|---|
 | 1 | `protocol/` | `function` | JSON-RPC request/result/error/notification shapes; IDs; `resultType`; standard and reserved errors; JSON Schema dialect handling, refused network `$ref` dereferencing, bounded composition keywords | 12 | — | High |
-| 2 | `versioning/` | `http` | Required per-request `_meta`; unsupported version retry; required capabilities; no handshake/session inference | 10 | 1 | High |
-| 3 | `transport/` | `http`, `sse` | POST endpoint, Accept/content types, required mirrored headers, Base64 sentinel encoding, `x-mcp-header`, mismatch errors, Origin, GET/DELETE rejection, ignored `Last-Event-ID` | 18 | 1,2 | High |
+| 2 | `versioning/` | `http` | Required per-request `_meta`; unsupported version retry; required capabilities; no handshake/session inference; no `Mcp-Session-Id` issued or honored | 10 | 1 | High |
+| 3 | `transport/` | `http`, `sse` | POST endpoint, Accept/content types, required mirrored headers, Base64 sentinel encoding, `x-mcp-header`, mismatch errors, Origin, GET/DELETE rejection, ignored `Last-Event-ID`, HTTP 413/504 error envelopes | 18 | 1,2 | High |
 | 4 | `discovery/` | `http` | Mandatory `server/discover`, capabilities, identity, instructions, cache hints, direct-call-without-discovery | 6 | 1–3 | Medium |
 | 5 | `primitives/` | `http`, `tool-call` | Deterministic list/get/read/call for tools, resources, templates, prompts; opaque-cursor pagination followed to completion, server-chosen page size, invalid cursor `-32602`; schemas, structured output, error split | 20 | 1–4 | High |
 | 6 | `incidents/` | `state-machine`, `http` | Explicit opaque handles, incident transitions, diagnostics, proposals, expiry, conditional at-most-once remediation | 12 | 5 | High |
@@ -54,7 +54,7 @@ The raw and SDK implementations are declared in `implementations/*.manifest`. Ea
 | 10 | `cli/` | `cli` | Equivalent commands, JSON stdout/stderr separation, exit codes, wire redaction, inspect/call, cache bypass, interactive MRTR actions | 14 | 3–9 | High |
 | 11 | `interoperability/` | `contract` | Raw→raw, raw→SDK, SDK→raw, SDK→SDK workflows and equivalent observables | 12 | 5–10 | Critical |
 | 12 | `properties/` | `property` | Header encode/decode round trip, cache-key stability, deterministic ordering, request-state tamper rejection, replica-independence | 7 | 1–9 | High |
-| 13 | `security/` | `http`, `lint-assertion` | Origin rebinding defense, malformed/unbounded schemas, header injection, request size/time bounds, bearer-handle entropy/unguessability floor, output/state redaction, simulated-only actions | 12 | 3,5–8 | Critical |
+| 13 | `security/` | `http`, `lint-assertion` | Origin rebinding defense, malformed/unbounded schemas, header injection, bounded request body/deadline enforcement with no partial effect, bearer-handle entropy/unguessability floor, output/state redaction, simulated-only actions | 12 | 3,5–8 | Critical |
 | 14 | `observability/` | `http`, `trace-span` | Health, structured logs, W3C trace context in `_meta`, method/name/replica/result metrics, bearer-handle/header/body redaction, other sensitive-field absence | 7 | 3,6 | Medium |
 | 15 | `performance/` | `metric-assertion` | Warm p95/error target, 100-request two-replica distribution, concurrent MRTR idempotency | 3 | 7,8,11 | High |
 | 16 | `architecture/` | `lint-assertion`, `decision-record` | Mandatory dependency direction and boundaries; raw repo cannot import MCP SDK; domain cannot import transport/persistence | 6 | — | High |
@@ -124,7 +124,7 @@ These are not implemented and receive no feature goldens in PLAN-001. Where the 
 
 - Fixture prose and exact deterministic telemetry values.
 - Internal APIs within the approved hexagonal boundaries.
-- Cache TTLs, retry backoff, and progress cadence within specified semantics and bounds.
+- Cache TTLs, retry backoff, progress cadence, and concrete request-size/deadline thresholds within specified semantics and bounds.
 - CDK construct layout, ECS CPU/memory at the smallest size meeting measured targets, and log retention up to seven days.
 - Exact schema validator and CLI formatting library, provided the raw repo does not import the MCP SDK and the CLI contract remains stable.
 
@@ -133,7 +133,7 @@ These are not implemented and receive no feature goldens in PLAN-001. Where the 
 - Protocol revision or feature envelope.
 - Deployment compute model if it changes externally observable streaming/cancellation behavior.
 - Real infrastructure access, persistent deployment, auth, extensions, subscriptions, legacy support, GUI, or LLM integration.
-- Shared implementation package between raw and SDK repos.
+- Shared implementation logic or a shared package between raw and SDK repos.
 - Any relaxation of the four-way matrix, cross-replica proof, simulated-only safety boundary, cloud teardown, or high/critical dependency gate.
 
 ## Non-functional requirements

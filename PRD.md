@@ -200,6 +200,7 @@ incident-mcp demo <url> [--approve|--decline|--cancel]
 11. Remediation effects are fictional, reviewable, and conditionally written at most once.
 12. A declined or cancelled elicitation never applies remediation.
 13. Both raw and SDK realizations must produce equivalent observable behavior; implementation-specific metadata may differ only where explicitly allowed.
+14. A request exceeding the configured body limit returns HTTP 413 with required `Content-Type: application/json` and JSON-RPC error `-32023`; server work that exceeds its request deadline returns HTTP 504 with the same required content type and error `-32024`. Both responses use `id: null`, include no result `_meta`, and carry no partial tool effect.
 
 ## Interoperability and acceptance
 
