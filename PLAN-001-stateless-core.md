@@ -62,7 +62,7 @@ The raw and SDK implementations are declared in `implementations/*.manifest`. Ea
 | 18 | `cicd/` | `workflow-assertion` | lint/typecheck/test/audit/build gates, four-way matrix, immutable image digest, AWS OIDC, deploy/verify/destroy ordering | 8 | 11,13,17 | High |
 | 19 | `dependencies/` | `function` | Lockfile reproducibility, approved licenses, `npm audit` high/critical floor, SDK absent from raw dependency graph | 5 | 16 | Medium |
 
-**Estimated total: 217 golden tests.** This is a large conformance plan because the selected goal includes both sides of the protocol, two implementations, streaming, cloud infrastructure, and a four-way matrix. Authoring should use category-sized rounds and risk-first ordering; estimates may shrink when one property test replaces many finite examples, but normative behaviors must not be dropped to hit a count.
+**Estimated total: 197 golden tests.** This is a large conformance plan because the selected goal includes both sides of the protocol, two implementations, streaming, cloud infrastructure, and a four-way matrix. Authoring should use category-sized rounds and risk-first ordering; estimates may shrink when one property test replaces many finite examples, but normative behaviors must not be dropped to hit a count.
 
 ## Stack categories (tier-1, optional)
 
