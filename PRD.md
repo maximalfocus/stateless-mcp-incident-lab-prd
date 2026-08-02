@@ -284,6 +284,7 @@ This is a deliberate learning boundary, not a claim that unauthenticated remote 
 - Making the AWS deployment persistent or production-facing.
 - Adding authentication, identity, paid third-party services, or another cloud.
 - Adding an MCP extension, legacy compatibility, GUI, or LLM provider integration.
+- Introducing shared implementation logic or a shared package between the raw and SDK realizations.
 - Weakening the four-way interoperability matrix, statelessness proof, security controls, or teardown requirement.
 
 ## Sources

@@ -36,7 +36,7 @@ The architectural shape is **hexagonal / ports-and-adapters**:
 | CI/CD | `stateless-mcp-incident-lab-cicd` | Reusable GitHub Actions workflows and image/deploy quality gates |
 | Infrastructure | `stateless-mcp-incident-lab-infrastructure` | AWS CDK for DynamoDB, ECR, ECS Fargate, ALB, WAF, Secrets Manager, and CloudWatch |
 
-The raw and SDK implementations are declared in `implementations/*.manifest`. Each is a service implementation containing both server and matching CLI, and its manifest starts an independent per-implementation Compose stack so it remains runnable before the sibling exists. The later shared acceptance artifact `demo/matrix.compose.yaml` is the single-command full-matrix topology and is deliberately separate from either registry bring-up binding.
+The raw and SDK implementations are declared in `implementations/*.manifest`. Each is a service implementation containing both server and matching CLI, and its manifest starts an independent per-implementation Compose stack so it remains runnable before the sibling exists. Registry `up`/`teardown` commands execute from the project-family root, so their Compose paths include the PRD repo name; direct PRD/demo commands execute from this repo and use `demo/...` paths. The later shared acceptance artifact `demo/matrix.compose.yaml` is the single-command full-matrix topology and is deliberately separate from either registry bring-up binding.
 
 ## Categories (core — language-neutral)
 
@@ -44,7 +44,7 @@ The raw and SDK implementations are declared in `implementations/*.manifest`. Ea
 |---|---|---|---|---:|---|---|
 | 1 | `protocol/` | `function` | JSON-RPC request/result/error/notification shapes; IDs; `resultType`; standard and reserved errors; JSON Schema dialect handling, refused network `$ref` dereferencing, bounded composition keywords | 12 | — | High |
 | 2 | `versioning/` | `http` | Required per-request `_meta`; unsupported version retry; required capabilities; no handshake/session inference | 10 | 1 | High |
-| 3 | `transport/` | `http`, `sse` | POST endpoint, Accept/content types, required mirrored headers, Base64 sentinel encoding, `x-mcp-header`, mismatch errors, Origin, GET/DELETE rejection | 18 | 1,2 | High |
+| 3 | `transport/` | `http`, `sse` | POST endpoint, Accept/content types, required mirrored headers, Base64 sentinel encoding, `x-mcp-header`, mismatch errors, Origin, GET/DELETE rejection, ignored `Last-Event-ID` | 18 | 1,2 | High |
 | 4 | `discovery/` | `http` | Mandatory `server/discover`, capabilities, identity, instructions, cache hints, direct-call-without-discovery | 6 | 1–3 | Medium |
 | 5 | `primitives/` | `http`, `tool-call` | Deterministic list/get/read/call for tools, resources, templates, prompts; opaque-cursor pagination followed to completion, server-chosen page size, invalid cursor `-32602`; schemas, structured output, error split | 20 | 1–4 | High |
 | 6 | `incidents/` | `state-machine`, `http` | Explicit opaque handles, incident transitions, diagnostics, proposals, expiry, conditional at-most-once remediation | 12 | 5 | High |
@@ -54,7 +54,7 @@ The raw and SDK implementations are declared in `implementations/*.manifest`. Ea
 | 10 | `cli/` | `cli` | Equivalent commands, JSON stdout/stderr separation, exit codes, wire redaction, inspect/call, cache bypass, interactive MRTR actions | 14 | 3–9 | High |
 | 11 | `interoperability/` | `contract` | Raw→raw, raw→SDK, SDK→raw, SDK→SDK workflows and equivalent observables | 12 | 5–10 | Critical |
 | 12 | `properties/` | `property` | Header encode/decode round trip, cache-key stability, deterministic ordering, request-state tamper rejection, replica-independence | 7 | 1–9 | High |
-| 13 | `security/` | `http`, `lint-assertion` | Origin rebinding defense, malformed/unbounded schemas, header injection, request size/time bounds, output/state redaction, simulated-only actions | 12 | 3,5–8 | Critical |
+| 13 | `security/` | `http`, `lint-assertion` | Origin rebinding defense, malformed/unbounded schemas, header injection, request size/time bounds, bearer-handle entropy/unguessability floor, output/state redaction, simulated-only actions | 12 | 3,5–8 | Critical |
 | 14 | `observability/` | `http`, `trace-span` | Health, structured logs, W3C trace context in `_meta`, method/name/replica/result metrics, bearer-handle/header/body redaction, other sensitive-field absence | 7 | 3,6 | Medium |
 | 15 | `performance/` | `metric-assertion` | Warm p95/error target, 100-request two-replica distribution, concurrent MRTR idempotency | 3 | 7,8,11 | High |
 | 16 | `architecture/` | `lint-assertion`, `decision-record` | Mandatory dependency direction and boundaries; raw repo cannot import MCP SDK; domain cannot import transport/persistence | 6 | — | High |
@@ -116,7 +116,7 @@ None block plan approval. Exact SDK package version is selected during authoring
 - Permanent hosting, production SLOs, multi-region, disaster recovery, or production data durability.
 - Redis, queues, relational databases, or alternate language ports.
 
-These receive no golden files in PLAN-001.
+These are not implemented and receive no feature goldens in PLAN-001. Where the PRD instead requires a stateless server to actively reject or ignore one of them — `Mcp-Session-Id`, GET/DELETE requests to an MCP endpoint, and `Last-Event-ID` — that negative assertion is authored in `versioning` and `transport`.
 
 ## Decision boundaries
 
