@@ -2,7 +2,7 @@
 
 ## Goal
 
-Author one language-neutral conformance suite for two independent TypeScript client/server realizations of MCP `2026-07-28`: a raw HTTP/JSON-RPC implementation and an official-SDK implementation. Prove all four client/server combinations locally and on AWS, including cross-replica MRTR retries and absence of protocol sessions.
+Author one language-neutral conformance suite for two independent TypeScript client/server realizations of MCP `2026-07-28`: a raw HTTP/JSON-RPC implementation and an official-SDK implementation. Prove all four client/server combinations locally and on AWS, including cross-replica MRTR retries and absence of protocol sessions. The suite claims selected wire-level conformance, with the unauthenticated elicitation identity-binding security requirement explicitly disclosed and deferred to an authorization plan.
 
 ## Approach
 
@@ -36,7 +36,7 @@ The architectural shape is **hexagonal / ports-and-adapters**:
 | CI/CD | `stateless-mcp-incident-lab-cicd` | Reusable GitHub Actions workflows and image/deploy quality gates |
 | Infrastructure | `stateless-mcp-incident-lab-infrastructure` | AWS CDK for DynamoDB, ECR, ECS Fargate, ALB, WAF, Secrets Manager, and CloudWatch |
 
-The raw and SDK implementations are declared in `implementations/*.manifest`. Each is a service implementation containing both server and matching CLI. The shared acceptance demo composes both entries to run the 2×2 client/server matrix.
+The raw and SDK implementations are declared in `implementations/*.manifest`. Each is a service implementation containing both server and matching CLI, and its manifest starts an independent per-implementation Compose stack so it remains runnable before the sibling exists. The later shared acceptance artifact `demo/matrix.compose.yaml` is the single-command full-matrix topology and is deliberately separate from either registry bring-up binding.
 
 ## Categories (core — language-neutral)
 
@@ -49,8 +49,8 @@ The raw and SDK implementations are declared in `implementations/*.manifest`. Ea
 | 5 | `primitives/` | `http`, `tool-call` | Deterministic list/get/read/call for tools, resources, templates, prompts; schemas, structured output, error split | 20 | 1–4 | High |
 | 6 | `incidents/` | `state-machine`, `http` | Explicit opaque handles, incident transitions, diagnostics, proposals, expiry, conditional at-most-once remediation | 12 | 5 | High |
 | 7 | `mrtr/` | `tool-call` | `input_required`, capability check, form elicitation, new retry ID, exact state echo, accept/decline/cancel, signed state tamper/expiry/binding, cross-replica retry | 16 | 2,5,6 | Critical |
-| 8 | `streaming/` | `sse` | Request-scoped progress, monotonic token updates, final response and close, disconnect cancellation, no post-completion events | 9 | 3,6 | High |
-| 9 | `cache/` | `function`, `http` | Mandatory hints, key method+params, TTL freshness, public/private scope, no MRTR caching, stale-on-error warning, deterministic pages | 10 | 4,5 | Medium |
+| 8 | `streaming/` | `sse` | Request-scoped progress, monotonic token updates, final response and close, disconnect cancellation, no post-completion events, broken-stream reissue with a new request ID | 9 | 3,6 | High |
+| 9 | `cache/` | `function`, `http` | Mandatory hints, key method+params+cursor, TTL freshness, public/private scope, no MRTR caching, stale-on-error warning, deterministic pages | 10 | 4,5,7 | Medium |
 | 10 | `cli/` | `cli` | Equivalent commands, JSON stdout/stderr separation, exit codes, wire redaction, inspect/call, cache bypass, interactive MRTR actions | 14 | 3–9 | High |
 | 11 | `interoperability/` | `contract` | Raw→raw, raw→SDK, SDK→raw, SDK→SDK workflows and equivalent observables | 12 | 5–10 | Critical |
 | 12 | `properties/` | `property` | Header encode/decode round trip, cache-key stability, deterministic ordering, request-state tamper rejection, replica-independence | 7 | 1–9 | High |
@@ -58,8 +58,8 @@ The raw and SDK implementations are declared in `implementations/*.manifest`. Ea
 | 14 | `observability/` | `http`, `trace-span` | Health, structured logs, W3C trace context in `_meta`, method/name/replica/result metrics, sensitive-field absence | 7 | 3,6 | Medium |
 | 15 | `performance/` | `metric-assertion` | Warm p95/error target, 100-request two-replica distribution, concurrent MRTR idempotency | 3 | 7,8,11 | High |
 | 16 | `architecture/` | `lint-assertion`, `decision-record` | Mandatory dependency direction and boundaries; raw repo cannot import MCP SDK; domain cannot import transport/persistence | 6 | — | High |
-| 17 | `infra/` | `function` | CDK assertions for encryption, TTL, least-privilege IAM/SG, ≥2 tasks, health checks, WAF rate rule, tags, log retention, destroyability | 10 | 3,13–15 | High |
-| 18 | `cicd/` | `workflow-assertion` | lint/typecheck/test/audit/build gates, four-way matrix, immutable image digest, AWS OIDC, deploy/verify/destroy ordering | 8 | 11,13,17 | High |
+| 17 | `infra/` | `function` | CDK assertions for encryption, TTL, least-privilege IAM/SG, ≥2 tasks, health checks, WAF rate rule, MRTR signing secret sourced from Secrets Manager and absent from plaintext task definitions, tags, log retention, scripted deploy→verify→destroy ordering, destroyability | 10 | 3,13–15 | High |
+| 18 | `cicd/` | `workflow-assertion` | lint/typecheck/test/audit/build gates, local four-way matrix, immutable image digest, and absence of long-lived AWS credentials or CI cloud-deploy steps | 8 | 11,13,17 | High |
 | 19 | `dependencies/` | `function` | Lockfile reproducibility, approved licenses, `npm audit` high/critical floor, SDK absent from raw dependency graph | 5 | 16 | Medium |
 
 **Estimated total: 197 golden tests.** This is a large conformance plan because the selected goal includes both sides of the protocol, two implementations, streaming, cloud infrastructure, and a four-way matrix. Authoring should use category-sized rounds and risk-first ordering; estimates may shrink when one property test replaces many finite examples, but normative behaviors must not be dropped to hit a count.
@@ -92,7 +92,7 @@ Real dependency edges are contract consumption, not narrative sequence. `mrtr` a
 | SDK lacks or interprets a new `2026-07-28` behavior differently | Blocks parity or exposes a real SDK defect | Pin a supporting SDK version, test raw wire output, record minimal reproducer; never weaken shared contract merely to fit SDK behavior |
 | Raw and SDK repos accidentally share implementation logic | Invalidates the learning comparison | Separate repos; architecture lint; raw dependency graph forbids MCP SDK; shared artifacts limited to goldens and fixtures |
 | “Stateless” is claimed while state leaks through process/connection | Core learning objective fails | Randomized replica routing, process restarts, connection churn, cross-replica MRTR, and property tests |
-| MRTR requestState tampering or replay duplicates remediation | Unsafe protocol example | HMAC, five-minute TTL, method/argument digest, exact echo, DynamoDB conditional single-use write, concurrency test |
+| MRTR requestState tampering or replay duplicates remediation | Unsafe protocol example | HMAC, five-minute TTL, method/argument digest, exact echo, DynamoDB conditional single-use write, concurrency test; disclose that authenticated-principal/elicitation identity binding is deferred |
 | ALB/proxy buffers SSE or disconnect is not propagated | Progress/cancellation conformance fails in AWS | Disable local proxy buffering; validate ALB behavior early with a spike; reconsider Lambda only if streaming contract is preserved |
 | Two implementations × two clients causes scope growth | Project stalls | Build thin vertical slices in risk order; one domain and one protocol revision; explicitly exclude extensions, auth, subscriptions, legacy, and GUI |
 | Unauthenticated cloud endpoint is abused | Cost or availability impact | Synthetic data only, WAF rate rule, bounded payload/work, short deployment window, immediate automated teardown |
@@ -140,9 +140,9 @@ These receive no golden files in PLAN-001.
 
 | Requirement | Target | Category | Boundary | Verified by |
 |---|---|---|---|---|
-| Protocol correctness | Selected `2026-07-28` MUSTs pass both implementations | `protocol`–`cache` | function/http/sse/tool-call | Shared conformance runner + captured schema hash |
+| Protocol correctness | Selected wire-level `2026-07-28` MUSTs pass both implementations; unauthenticated elicitation identity binding is a disclosed exception | `protocol`–`cache` | function/http/sse/tool-call | Shared conformance runner + captured schema hash + exception assertion in docs contract |
 | Interoperability | 4/4 client-server combinations green | `interoperability` | contract | Matrix acceptance scenario `INT-001` |
-| Replica independence | 100 requests hit ≥2 replicas; cross-replica MRTR succeeds | `performance`, `mrtr` | metric-assertion/tool-call | k6 distribution check + `MRTR-012` |
+| Replica independence | 100 requests hit ≥2 replicas; local direct-replica MRTR succeeds; AWS observes a different-task pair within 20 serialized attempts | `performance`, `mrtr` | metric-assertion/tool-call | k6 distribution check + bounded `MRTR-012` |
 | Idempotency | One effect from 20 concurrent accepted retries | `incidents`, `performance` | state-machine/metric-assertion | DynamoDB conditional-write scenario `PERF-003` |
 | Latency | Warm p95 ≤750 ms at 10 rps; errors <1% | `performance` | metric-assertion | k6 local and deployed profiles |
 | Protocol-core coverage | 100% statements and branches | implementation quality gate | metric-assertion | Vitest V8 coverage in each repo |
@@ -164,7 +164,7 @@ These receive no golden files in PLAN-001.
 | Framework | Raw: `node:http`, native Fetch/Web Streams, `node:util.parseArgs`; SDK: official `@modelcontextprotocol/sdk`; no Express/Fastify | Keeps comparison focused on MCP abstractions, not web-framework behavior |
 | Deployment target | Local Docker Compose with Nginx; AWS ECS Fargate (≥2 tasks/implementation) behind ALB in `ap-southeast-1`; AWS CDK | Supports JSON and request-scoped SSE/disconnect semantics while proving horizontal routing |
 | Testing framework | Vitest + Testcontainers; k6 for controlled load; Stryker for raw-core mutation | User-approved unit/integration stack plus explicit performance and test-strength tools |
-| Auth provider | None in PLAN-001; ephemeral synthetic deployment only | Deliberately isolates stateless core; WAF throttling, IAM, origin checks, and teardown remain |
+| Auth provider | None in PLAN-001; ephemeral synthetic deployment only | Deliberately isolates stateless core; elicitation identity binding is disclosed as non-conforming/deferred while WAF throttling, IAM, origin checks, and teardown remain |
 | Cache/queue | Client in-process MCP hint cache only; no external cache; no queue | User-approved protocol-cache focus; Tasks/subscriptions are excluded |
 
 ## Authoring slices

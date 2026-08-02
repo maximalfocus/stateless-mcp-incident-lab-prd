@@ -12,7 +12,7 @@ Captured on 2026-08-01 for offline, reviewable planning. `SHA256SUMS` records th
 
 ## Captured specification pages
 
-The specification capture includes architecture, base messages, versioning, Streamable HTTP, MRTR, progress, cancellation, discovery, tools, resources, prompts, caching, pagination, elicitation, deprecations, changelog, and the schema reference/index. Authorization pages and extension specifications were not copied because they are explicitly outside this plan; the top-level index still records their existence.
+The specification capture includes architecture, base messages, versioning, Streamable HTTP, MRTR, progress, cancellation, discovery, tools, resources, prompts, caching, pagination, elicitation, deprecations, changelog, and the schema reference/index. Authorization, stdio, subscriptions, logging, completion, Roots, Sampling, and extension pages were not copied because they are explicitly outside this plan; the top-level index and captured cross-links still record their existence.
 
 ## Interpretation rule
 

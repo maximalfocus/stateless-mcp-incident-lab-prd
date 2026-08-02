@@ -77,30 +77,32 @@ flowchart LR
     R1 & R2 & S1 & S2 --> OBS[JSON logs / traces]
 ```
 
-The endpoint paths distinguish implementations (`/raw/mcp` and `/sdk/mcp`); replicas behind each path are interchangeable. Every response includes a non-security `serverInfo` and diagnostic replica identifier so acceptance tests can prove distribution. No behavior may depend on that identifier.
+The endpoint paths distinguish implementations (`/raw/mcp` and `/sdk/mcp`); replicas behind each path are interchangeable. Every response includes a non-security `_meta.io.modelcontextprotocol/serverInfo` plus a diagnostic replica identifier carried under a non-reserved vendor `_meta` prefix, so acceptance tests can prove distribution. No behavior may depend on that identifier.
 
 ## MCP surface
 
 ### Required request metadata
 
-Every request includes:
+Every request carries its protocol metadata in the request `params._meta` object — never at the top level of the JSON-RPC message — and mirrors selected fields into HTTP headers:
 
-- body `_meta.io.modelcontextprotocol/protocolVersion = "2026-07-28"`;
-- body `_meta.io.modelcontextprotocol/clientCapabilities`;
-- body `_meta.io.modelcontextprotocol/clientInfo` unless explicitly disabled for a negative test;
+- `params._meta.io.modelcontextprotocol/protocolVersion = "2026-07-28"` (required);
+- `params._meta.io.modelcontextprotocol/clientCapabilities` (required);
+- `params._meta.io.modelcontextprotocol/clientInfo` (recommended, not required; a negative test omits it and asserts the server still accepts the request);
 - HTTP `MCP-Protocol-Version` matching the body;
 - HTTP `Mcp-Method` matching the JSON-RPC method;
 - HTTP `Mcp-Name` for `tools/call`, `resources/read`, and `prompts/get`;
 - `Accept: application/json, text/event-stream`.
 
-The client implements Base64 sentinel encoding for non-header-safe `Mcp-Name` and `Mcp-Param-*` values. The server validates header/body equality case-insensitively for header names and case-sensitively for values.
+MRTR retry fields (`inputResponses`, `requestState`) are also request `params`, sibling to `name`/`arguments`, not tool arguments.
+
+The client implements Base64 sentinel encoding for non-header-safe `Mcp-Name` and `Mcp-Param-*` values, and excludes from its `tools/list` result any tool whose `x-mcp-header` annotation violates the specification's constraints. The server validates header/body equality case-insensitively for header names and case-sensitively for values.
 
 ### Discovery
 
 `server/discover` returns:
 
 - supported version `2026-07-28`;
-- tools, resources, prompts, and form-elicitation-relevant capabilities;
+- tools, resources, and prompts server capabilities; elicitation remains a client capability declared independently on each request;
 - server identity and learner guidance;
 - public cache hints.
 
@@ -128,6 +130,8 @@ All tools have JSON Schema 2020-12 input and output schemas. Structured results 
 - `resources/list`, `resources/templates/list`, and `resources/read` use deterministic ordering and appropriate cache hints.
 - Unknown resources return `-32602`; they never return an ambiguous empty `contents` array.
 
+Every list operation (`tools/list`, `prompts/list`, `resources/list`, `resources/templates/list`) may be paginated. Page size is the server's choice, `nextCursor` is opaque to the client, the client follows cursors to completion without inferring meaning from their value, the cursor is part of the client cache key, and every page of one list carries the same `cacheScope`. An invalid cursor returns `-32602`.
+
 ### Prompts
 
 - `triage_incident(incident_id)` — user-controlled prompt containing investigation instructions and links to relevant resources.
@@ -153,11 +157,11 @@ sequenceDiagram
     B-->>C: complete result
 ```
 
-The retry uses a new JSON-RPC ID and can land on another replica. `requestState` is opaque to the client, integrity-protected, expires after five minutes, and binds the original method and salient arguments. Tampering, expiry, cross-request reuse, duplicate execution, missing capability, acceptance, decline, and cancel are all tested.
+The retry uses a new JSON-RPC ID and can land on another replica. `requestState` is opaque to the client, integrity-protected, expires after five minutes, and binds the original method and salient arguments. Because PLAN-001 deliberately has no authenticated user, it cannot satisfy elicitation's production identity-binding security requirement or bind `requestState` to an authenticated principal; this is a disclosed protocol-security exception deferred with authorization, not claimed as conforming behavior. The lab instead limits itself to one synthetic anonymous actor, enforces at-most-once execution with a conditional DynamoDB write, and keeps the endpoint synthetic, rate-limited, and ephemeral. Tampering, expiry, cross-request reuse, duplicate execution, missing capability, acceptance, decline, and cancel are all tested.
 
 ### Progress and cancellation
 
-`run_diagnostic` may return request-scoped SSE when the client supplies a unique `progressToken`. Progress is monotonic, rate-limited, ends before the final response, and is never emitted after completion. Closing the HTTP response stream cancels work and releases resources. Simple requests may return `application/json`.
+`run_diagnostic` may return request-scoped SSE when the client supplies a unique `progressToken`. Progress is monotonic, rate-limited, ends before the final response, and is never emitted after completion. Closing the HTTP response stream cancels work and releases resources. If a response stream breaks before its final response, the client treats that request as lost and reissues it with a new JSON-RPC ID. SSE responses set `X-Accel-Buffering: no`, and no proxy in the local or AWS path may buffer them. Simple requests may return `application/json`.
 
 ### Caching
 
@@ -185,13 +189,13 @@ incident-mcp demo <url> [--approve|--decline|--cancel]
 
 1. MCP transport context is never inferred from a connection, process, cookie, source IP, prior request, or replica.
 2. Protocol version and client capabilities are evaluated independently on every request.
-3. No response creates, returns, or relies on `Mcp-Session-Id`.
-4. Incident continuity uses only explicit opaque handles supplied in request arguments.
+3. No response creates, returns, or relies on `Mcp-Session-Id`; GET or DELETE to an MCP endpoint returns HTTP 405, and `Last-Event-ID` is ignored.
+4. Incident continuity uses only explicit opaque handles supplied in request arguments. Because the endpoint is unauthenticated, those handles are bearer tokens: they are high-entropy (UUIDv4 or stronger), unguessable, and TTL-bounded.
 5. Tool, prompt, and resource lists are deterministic when their underlying sets are unchanged.
-6. Every mirrored HTTP header must match its body source; mismatches return HTTP 400 and JSON-RPC `-32020`.
+6. Every mirrored HTTP header must match its body source; mismatches, and missing or malformed required headers, return HTTP 400 and JSON-RPC `-32020`.
 7. Unsupported protocol versions return HTTP 400 and `-32022` with supported versions.
 8. Missing required client capability returns HTTP 400 and `-32021`.
-9. Missing methods return HTTP 404 and `-32601`; malformed requests use the applicable JSON-RPC standard code.
+9. Missing methods return HTTP 404 and `-32601`; a request missing a required `params._meta` field returns HTTP 400 and `-32602`; other malformed requests use the applicable JSON-RPC standard code.
 10. An invalid `Origin` returns HTTP 403. Local servers bind to localhost unless running inside the isolated Compose network.
 11. Remediation effects are fictional, reviewable, and conditionally written at most once.
 12. A declined or cancelled elicitation never applies remediation.
@@ -208,13 +212,13 @@ The mandatory matrix is:
 | SDK | Raw | Yes |
 | SDK | SDK | Yes |
 
-Each pair runs discovery, catalog reads, resource/prompt retrieval, an incident workflow, MRTR acceptance/decline/cancel, error recovery, cache behavior, SSE progress/cancellation, and structured output validation. The local and AWS deployments each prove requests reach at least two replicas without sticky sessions and that an MRTR retry can complete on a different replica from its initial call.
+Each pair runs discovery, catalog reads, resource/prompt retrieval, an incident workflow, MRTR acceptance/decline/cancel, error recovery, cache behavior, SSE progress/cancellation, and structured output validation. The local deployment proves cross-replica MRTR deterministically by sending the initial call and retry to test-only direct replica endpoints, while separately proving the public Nginx endpoint distributes requests. AWS proves ALB distribution across at least two task IDs, then runs up to 20 serialized initial/retry pairs and requires at least one pair to complete on different task IDs; this bounded observation fails rather than making an unverified cross-replica claim.
 
 ## Non-functional requirements
 
 | Area | Target |
 |---|---|
-| Correctness | All selected MCP normative requirements and all four interoperability combinations pass the shared conformance suite |
+| Correctness | All selected wire-level MCP normative requirements and all four interoperability combinations pass; the unauthenticated elicitation identity-binding exception is explicitly excluded from the conformance claim |
 | Statelessness | At least 100 sequential requests distribute across at least two healthy replicas; behavior and result equivalence do not depend on replica |
 | Reliability | Zero duplicate simulated remediation effects under 20 concurrent retries of one accepted MRTR state |
 | Performance | After warm-up, catalog requests at 10 requests/s achieve p95 ≤ 750 ms and error rate < 1% locally and in AWS |
@@ -228,7 +232,7 @@ Each pair runs discovery, catalog reads, resource/prompt retrieval, an incident 
 
 ### Local
 
-Docker Compose runs DynamoDB Local, a deterministic seed job, Nginx, two raw-server replicas, and two SDK-server replicas. Health checks gate readiness. The same images and environment contracts are used in CI.
+The acceptance matrix uses one `demo/matrix.compose.yaml` command to run DynamoDB Local, a deterministic seed job, Nginx, two raw-server replicas, and two SDK-server replicas; it also exposes test-only direct replica endpoints on localhost for deterministic cross-replica scenarios. Health checks gate readiness. Each implementation registry manifest points to a smaller per-implementation Compose file for authoring and implementation review before its sibling exists; those stacks are independent and do not claim to run the four-way matrix. The same images and environment contracts are used in CI.
 
 ### AWS
 
@@ -249,7 +253,7 @@ The deployment uses the authenticated `cc-sandbox` profile interactively. Creden
 
 The initial endpoint is unauthenticated to keep the project focused on the stateless core. It contains only synthetic shared data and simulated effects. The cloud environment is deployed only for acceptance and torn down immediately afterward. WAF rate limiting, bounded request sizes, timeouts, least-privilege IAM, origin validation, schema complexity bounds, safe header encoding, output sanitization, and dependency scanning remain required.
 
-This is a deliberate learning boundary, not a claim that unauthenticated remote MCP is production-ready. OAuth issuer validation, Client ID Metadata Documents, authorization-context cache isolation, and user-bound handles belong in a later plan.
+This is a deliberate learning boundary, not a claim that unauthenticated remote MCP is production-ready or fully conforms to elicitation's identity-binding security requirement. OAuth issuer validation, Client ID Metadata Documents, authorization-context cache isolation, authenticated-principal binding, and user-bound handles belong in a later plan.
 
 ## Out of scope
 
