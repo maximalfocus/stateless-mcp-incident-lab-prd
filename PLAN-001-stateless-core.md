@@ -42,9 +42,9 @@ The raw and SDK implementations are declared in `implementations/*.manifest`. Ea
 
 | # | Category | Boundary | Key behaviors | Est. tests | Deps | Risk |
 |---|---|---|---|---:|---|---|
-| 1 | `protocol/` | `function` | JSON-RPC request/result/error/notification shapes; IDs; `resultType`; standard and reserved errors; JSON Schema dialect handling, refused network `$ref` dereferencing, bounded composition keywords | 12 | — | High |
+| 1 | `protocol/` | `function` | JSON-RPC request/result/error/notification shapes; IDs; `resultType`; standard and reserved errors, including that no undefined `-32020`–`-32099` code is ever emitted; JSON Schema dialect handling, refused network `$ref` dereferencing, bounded composition keywords | 12 | — | High |
 | 2 | `versioning/` | `http` | Required per-request `_meta`; unsupported version retry; required capabilities; no handshake/session inference; no `Mcp-Session-Id` issued or honored | 10 | 1 | High |
-| 3 | `transport/` | `http`, `sse` | POST endpoint, Accept/content types, required mirrored headers, Base64 sentinel encoding, `x-mcp-header`, mismatch errors, Origin, GET/DELETE rejection, ignored `Last-Event-ID`, HTTP 413/504 error envelopes | 18 | 1,2 | High |
+| 3 | `transport/` | `http`, `sse` | POST endpoint, Accept/content types, required mirrored headers, Base64 sentinel encoding, `x-mcp-header`, deterministic validation precedence, mismatch errors, Origin, GET/DELETE rejection, ignored `Last-Event-ID`, HTTP 413/504 error envelopes | 18 | 1,2 | High |
 | 4 | `discovery/` | `http` | Mandatory `server/discover`, capabilities, identity, instructions, cache hints, direct-call-without-discovery | 6 | 1–3 | Medium |
 | 5 | `primitives/` | `http`, `tool-call` | Deterministic list/get/read/call for tools, resources, templates, prompts; opaque-cursor pagination followed to completion, server-chosen page size, invalid cursor `-32602`; schemas, structured output, error split | 20 | 1–4 | High |
 | 6 | `incidents/` | `state-machine`, `http` | Explicit opaque handles, incident transitions, diagnostics, proposals, expiry, conditional at-most-once remediation | 12 | 5 | High |
@@ -124,7 +124,7 @@ These are not implemented and receive no feature goldens in PLAN-001. Where the 
 
 - Fixture prose and exact deterministic telemetry values.
 - Internal APIs within the approved hexagonal boundaries.
-- Cache TTLs, retry backoff, progress cadence, and concrete request-size/deadline thresholds within specified semantics and bounds.
+- Cache TTLs, retry backoff, progress cadence, and concrete request-size/deadline thresholds within specified semantics and bounds; the shared error codes and precedence are fixed by the PRD.
 - CDK construct layout, ECS CPU/memory at the smallest size meeting measured targets, and log retention up to seven days.
 - Exact schema validator and CLI formatting library, provided the raw repo does not import the MCP SDK and the CLI contract remains stable.
 
