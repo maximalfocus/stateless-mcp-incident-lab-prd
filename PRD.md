@@ -127,7 +127,8 @@ All tools have JSON Schema 2020-12 input and output schemas; validators never de
 - `incident://topology/services` — stable fictional service map.
 - `incident://runbooks/{service_id}` — versioned runbook markdown.
 - `incident://incidents/{incident_id}/timeline` — incident-specific telemetry timeline.
-- `resources/list`, `resources/templates/list`, and `resources/read` use deterministic ordering and pinned cache hints: `public` for the static topology and runbook resources, `private` for incident-scoped reads whose handle is a bearer token.
+- `resources/list` enumerates only the static topology resource and one concrete runbook resource per seeded service; `resources/templates/list` publishes both parameterized URIs above as RFC 6570 templates. No concrete incident URI or bearer handle ever appears in a catalog result; the catalog exposes only the placeholder template, so a caller reaches a timeline only by already holding and substituting its handle.
+- `resources/list`, `resources/templates/list`, and `resources/read` use deterministic ordering and pinned cache hints: `public` for the static topology and runbook resources and for both catalogs, `private` for incident-scoped reads whose handle is a bearer token.
 - Unknown resources return `-32602`; they never return an ambiguous empty `contents` array.
 
 Every list operation (`tools/list`, `prompts/list`, `resources/list`, `resources/templates/list`) may be paginated. Page size is the server's choice, `nextCursor` is opaque to the client, the client follows cursors to completion without inferring meaning from their value, the cursor is part of the client cache key, and every page of one list carries the same `cacheScope` while each page may carry its own `ttlMs`. An invalid cursor returns `-32602`; a client whose cursor is rejected mid-walk discards every cached page of that list and re-walks from the first page rather than returning a partial list.
@@ -167,7 +168,7 @@ The retry uses a new JSON-RPC ID and can land on another replica. `requestState`
 
 ### Caching
 
-Exactly six operations are cacheable and carry `ttlMs >= 0` and `cacheScope` on their `complete` results: `server/discover`, `tools/list`, `prompts/list`, `resources/list`, `resources/templates/list`, and `resources/read`. No other result — including every `tools/call` and `prompts/get` result — carries hints or may be cached. The client keeps only an in-process cache keyed by method and all result-affecting parameters, and never serves a result that arrived without hints. It never caches `input_required` results or MRTR retries, does not treat TTL as a polling interval, and can serve stale data only after a failed refresh with a visible warning. There is no Redis, shared cache, or queue.
+Exactly six operations are cacheable and carry `ttlMs >= 0` and `cacheScope` on their `complete` results: `server/discover`, `tools/list`, `prompts/list`, `resources/list`, `resources/templates/list`, and `resources/read`. No other result — including every `tools/call` and `prompts/get` result — carries hints or may be cached. Every one of the six uses `cacheScope: "public"` except an incident-scoped `resources/read`, which is `private`; because the endpoint is unauthenticated there is no authorization context to isolate a shared cache by, which is why the client cache stays in-process. The client keeps only an in-process cache keyed by method and all result-affecting parameters, and never serves a result that arrived without hints. It never caches `input_required` results or MRTR retries, does not treat TTL as a polling interval, and can serve stale data only after a failed refresh with a visible warning. There is no Redis, shared cache, or queue.
 
 ### CLI surface
 
@@ -179,6 +180,7 @@ incident-mcp tools list <url>
 incident-mcp tools inspect <url> <name>
 incident-mcp tools call <url> <name> --json '<arguments>'
 incident-mcp resources list <url>
+incident-mcp resources templates <url>
 incident-mcp resources read <url> <uri>
 incident-mcp prompts list <url>
 incident-mcp prompts get <url> <name> --json '<arguments>'
