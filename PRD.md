@@ -101,8 +101,8 @@ The client implements Base64 sentinel encoding for non-header-safe `Mcp-Name` an
 
 `server/discover` returns:
 
-- supported version `2026-07-28`;
-- tools, resources, and prompts server capabilities; elicitation remains a client capability declared independently on each request;
+- `supportedVersions: ["2026-07-28"]`;
+- `tools`, `resources`, and `prompts` server capabilities, and no others. Because the lab implements neither list-change notifications, resource subscriptions, logging, nor argument completion, it never advertises `listChanged`, `subscribe`, `logging`, or `completions` — capabilities are declared only where the behavior exists, and both realizations advertise the identical set. Elicitation remains a client capability declared independently on each request;
 - server identity and learner guidance;
 - public cache hints.
 
@@ -139,6 +139,8 @@ Every list operation (`tools/list`, `prompts/list`, `resources/list`, `resources
 - `prompts/list` is deterministic and cacheable; `prompts/get` validates required arguments and returns `-32602` for an unknown prompt name or a missing required argument.
 
 ### MRTR elicitation
+
+The client declares `elicitation: { form: {} }` — the specification treats a bare `elicitation: {}` as form-mode-only support. `execute_remediation` requires form-mode elicitation, so a request that omits `elicitation` or declares only `url` support returns `-32021` rather than an elicitation the client cannot service; the server never emits an elicitation mode the request did not declare. Each elicitation carries `mode: "form"` and a human-readable `message`, and its `requestedSchema` is a flat object of primitive properties only, as form mode requires.
 
 `execute_remediation` follows the stateless MRTR sequence:
 
@@ -235,7 +237,7 @@ Each pair runs discovery, catalog reads, resource/prompt retrieval, an incident 
 
 ### Local
 
-The acceptance matrix uses one `demo/matrix.compose.yaml` command to run DynamoDB Local, a deterministic seed job, Nginx, two raw-server replicas, and two SDK-server replicas; it also exposes test-only direct replica endpoints on localhost for deterministic cross-replica scenarios. Health checks gate readiness. Each implementation registry manifest points to a smaller per-implementation Compose file for authoring and implementation review before its sibling exists; those stacks are independent and do not claim to run the four-way matrix. The same images and environment contracts are used in CI.
+The acceptance matrix uses one `demo/matrix.compose.yaml` command to run DynamoDB Local, a deterministic seed job, Nginx, two raw-server replicas, and two SDK-server replicas; it also exposes test-only direct replica endpoints on localhost for deterministic cross-replica scenarios. Health checks gate readiness through non-MCP endpoints `GET /raw/healthz` and `GET /sdk/healthz`; they require no MCP headers, return `200` with `Content-Type: application/json` and `{"status":"ok"}` only after the server and DynamoDB adapter are ready, and otherwise return `503` with `{"status":"unavailable"}`. Each implementation registry manifest points to a smaller per-implementation Compose file for authoring and implementation review before its sibling exists; those stacks are independent and do not claim to run the four-way matrix. The same images and environment contracts are used in CI.
 
 ### AWS
 
@@ -264,6 +266,7 @@ This is a deliberate learning boundary, not a claim that unauthenticated remote 
 - Tasks, MCP Apps, Skills over MCP, Enterprise Managed Authorization, or other extensions.
 - Legacy initialization/session behavior, dual-era compatibility, HTTP+SSE, resumable streams, Roots, Sampling, and Logging.
 - `subscriptions/listen`, list-change notifications, and resource subscriptions.
+- `completion/complete` argument autocompletion and the `completions` server capability.
 - URL-mode elicitation or handling secrets through elicitation.
 - Real logs, credentials, cloud APIs, shell execution, service restarts, host isolation, or production remediation.
 - A graphical frontend or LLM/chat-host integration.
