@@ -32,7 +32,7 @@ The architectural shape is **hexagonal / ports-and-adapters**:
 | Frontend Conformance | N/A | No graphical frontend |
 | Implementation: raw | `stateless-mcp-incident-lab-typescript-raw` | Raw client and server using `node:http`, `fetch`, and direct JSON-RPC/SSE handling |
 | Implementation: SDK | `stateless-mcp-incident-lab-typescript-sdk` | Equivalent client and server using the official MCP TypeScript SDK |
-| Architecture | `stateless-mcp-incident-lab-architecture` | ADRs, topology diagrams, and per-implementation boundary rules; scaffold after plan approval |
+| Architecture | `stateless-mcp-incident-lab-architecture` | Scaffolded 2026-08-01 with 4 `Status: Proposed` ADR stubs covering independent raw/SDK realizations, DynamoDB state, Fargate/ALB transport, and ephemeral auth deferral; promoted to `Accepted` lazily by citing `/cdd-author` rounds |
 | CI/CD | `stateless-mcp-incident-lab-cicd` | Reusable GitHub Actions workflows and image/deploy quality gates |
 | Infrastructure | `stateless-mcp-incident-lab-infrastructure` | AWS CDK for DynamoDB, ECR, ECS Fargate, ALB, WAF, Secrets Manager, and CloudWatch |
 

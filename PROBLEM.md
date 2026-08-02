@@ -51,12 +51,13 @@ Additionally:
 - Compare every normative protocol claim touched in a round against the captured specification page and `sources/spec-2026-07-28/schema.ts`.
 - Recompute PRD→PLAN semantic coverage and category preconditions adversarially; `scripts/verify-prd.py` verifies structural closure but does not claim to understand prose semantics.
 - Validate each Mermaid block with `mmdc` when available; otherwise record renderer validation as a residual rather than claiming it ran.
-- Confirm no sibling architecture/conformance/implementation/infrastructure repositories exist yet; if one appears during review, reconcile PLAN claims against it.
+- Reconcile PLAN architecture claims and source links against the scaffolded sibling `../stateless-mcp-incident-lab-architecture/`; confirm no conformance, implementation, CI/CD, or infrastructure sibling exists yet.
 
 ## Residuals
 
 - Cloud transport, performance, cost, and teardown claims are forecasts until deployed acceptance runs; this PRD review can judge their testability and honesty, not execute them.
 - Exact official MCP SDK package version remains intentionally selected at authoring from a live registry release declaring `2026-07-28` support.
+- The sibling architecture repo contains four `Status: Proposed` stubs; their substantive decisions remain unpromoted until citing conformance rounds.
 - Mermaid rendering is residual if no validator is installed; static diagram-to-text reconciliation still runs.
 
 ## Review objective
