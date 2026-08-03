@@ -1,0 +1,17 @@
+{
+  "name": "@maximalfocus/stateless-mcp-incident-lab-family",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test:integration": "tsx demo/run-matrix.ts",
+    "matrix:up": "docker compose -f demo/matrix.compose.yaml up -d --build --wait",
+    "matrix:down": "docker compose -f demo/matrix.compose.yaml down -v --remove-orphans"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}
