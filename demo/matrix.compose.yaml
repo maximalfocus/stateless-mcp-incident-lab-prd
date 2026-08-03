@@ -1,0 +1,39 @@
+name: stateless-mcp-incident-lab
+x-runtime: &runtime
+  NODE_ENV: production
+  EFFECT_STORE: memory
+  MCP_REQUEST_STATE_SECRET: 0123456789abcdef0123456789abcdef
+x-health: &health
+  interval: 2s
+  timeout: 1s
+  retries: 20
+services:
+  raw-1:
+    build: { context: ../../stateless-mcp-incident-lab-typescript-raw, target: runtime }
+    environment: { <<: *runtime, HOST: 0.0.0.0, PORT: 3101, REPLICA_ID: raw-1 }
+    ports: ["3001:3101"]
+    healthcheck: { <<: *health, test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3101/raw/healthz"] }
+  raw-2:
+    build: { context: ../../stateless-mcp-incident-lab-typescript-raw, target: runtime }
+    environment: { <<: *runtime, HOST: 0.0.0.0, PORT: 3101, REPLICA_ID: raw-2 }
+    ports: ["3002:3101"]
+    healthcheck: { <<: *health, test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3101/raw/healthz"] }
+  sdk-1:
+    build: { context: ../../stateless-mcp-incident-lab-typescript-sdk, target: runtime }
+    environment: { <<: *runtime, HOST: 0.0.0.0, PORT: 3102, REPLICA_ID: sdk-1 }
+    ports: ["4001:3102"]
+    healthcheck: { <<: *health, test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3102/sdk/healthz"] }
+  sdk-2:
+    build: { context: ../../stateless-mcp-incident-lab-typescript-sdk, target: runtime }
+    environment: { <<: *runtime, HOST: 0.0.0.0, PORT: 3102, REPLICA_ID: sdk-2 }
+    ports: ["4002:3102"]
+    healthcheck: { <<: *health, test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3102/sdk/healthz"] }
+  nginx:
+    image: nginx:1.27-alpine
+    volumes: ["./nginx.conf:/etc/nginx/nginx.conf:ro"]
+    ports: ["80:80"]
+    depends_on:
+      raw-1: { condition: service_healthy }
+      raw-2: { condition: service_healthy }
+      sdk-1: { condition: service_healthy }
+      sdk-2: { condition: service_healthy }
