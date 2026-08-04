@@ -105,9 +105,19 @@ async function workflow(input: Json): Promise<Json> {
   }
 }
 
+async function compareMatrix(): Promise<Json> {
+  const pairs = [['raw', 'raw'], ['raw', 'sdk'], ['sdk', 'raw'], ['sdk', 'sdk']] as const
+  const observations: Json[] = []
+  for (const [clientKind, server] of pairs) observations.push(await workflow({ client: clientKind, server }))
+  const baseline = JSON.stringify(observations[0])
+  const mismatches = observations.flatMap((value, index) => JSON.stringify(value) === baseline ? [] : [`${pairs[index]?.join('-')} differs`])
+  return { equivalent: mismatches.length === 0, mismatches }
+}
+
 export async function evaluate(input: Json): Promise<Json> {
   if (input.operation === 'run_matrix_scenario' && input.scenario === 'catalogs') return await catalogs(input)
   if (input.operation === 'run_matrix_scenario' && input.scenario === 'workflow') return await workflow(input)
+  if (input.operation === 'compare_matrix') return await compareMatrix()
   throw new RangeError(`Unsupported integration operation: ${String(input.operation)}`)
 }
 
