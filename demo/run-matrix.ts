@@ -105,6 +105,73 @@ async function workflow(input: Json): Promise<Json> {
   }
 }
 
+function replica(response: RpcResponse): string {
+  const meta = object(object(response.result)._meta)
+  return String(meta['io.maximalfocus.stateless-incident-lab/replica'])
+}
+
+async function providerDifferences(): Promise<Json> {
+  const [raw, sdk] = await Promise.all([
+    (await client('raw')).rpcCall('http://127.0.0.1:3001/raw/mcp', 'server/discover'),
+    (await client('sdk')).rpcCall('http://127.0.0.1:4001/sdk/mcp', 'server/discover'),
+  ])
+  const normalize = (response: RpcResponse): Json => {
+    const result = structuredClone(object(response.result))
+    const meta = object(result._meta)
+    delete meta['io.modelcontextprotocol/serverInfo']
+    delete meta['io.maximalfocus.stateless-incident-lab/replica']
+    return result
+  }
+  return { unexpected_differences: JSON.stringify(normalize(raw)) === JSON.stringify(normalize(sdk)) ? [] : ['normalized discovery payload'] }
+}
+
+async function publicDistribution(input: Json): Promise<Json> {
+  const count = Number(input.count_per_endpoint)
+  const endpoints = input.endpoints
+  if (!Array.isArray(endpoints)) throw new TypeError('endpoints required')
+  const providers: Json[] = []
+  for (const endpointValue of endpoints) {
+    const endpoint = object(endpointValue)
+    const provider = String(endpoint.provider)
+    const module = await client(provider)
+    const replicas = new Set<string>()
+    let baseline = ''
+    const mismatches: number[] = []
+    for (let index = 0; index < count; index += 1) {
+      const response = await module.rpcCall(String(endpoint.url).replace('localhost', '127.0.0.1'), 'server/discover', {}, index + 1, { noCache: true })
+      replicas.add(replica(response))
+      const normalized = JSON.stringify({ ...object(response.result), _meta: undefined })
+      if (index === 0) baseline = normalized
+      else if (normalized !== baseline) mismatches.push(index)
+    }
+    providers.push({ provider, unique_replicas: [...replicas].sort(), normalized_mismatches: mismatches })
+  }
+  return { providers }
+}
+
+async function crossReplica(input: Json): Promise<Json> {
+  if (!Array.isArray(input.pairs)) throw new TypeError('pairs required')
+  const providers: Json[] = []
+  for (const pairValue of input.pairs) {
+    const pair = object(pairValue)
+    const provider = String(pair.provider)
+    const module = await client(provider)
+    const initialUrl = String(pair.initial_endpoint).replace('localhost', '127.0.0.1')
+    const retryUrl = String(pair.retry_endpoint).replace('localhost', '127.0.0.1')
+    const created = structured(await module.rpcCall(initialUrl, 'tools/call', { name: 'create_incident', arguments: { title: 'Cross replica', severity: 'high', suspected_services: ['api'] } }, 1, { noCache: true }))
+    const incidentId = String(created.incident_id)
+    await module.rpcCall(initialUrl, 'tools/call', { name: 'run_diagnostic', arguments: { incident_id: incidentId, service: 'api' } }, 2, { noCache: true })
+    const proposal = structured(await module.rpcCall(initialUrl, 'tools/call', { name: 'propose_remediation', arguments: { incident_id: incidentId, finding: 'DB_LATENCY' } }, 3, { noCache: true }))
+    const argumentsValue = { incident_id: incidentId, remediation_id: String(proposal.remediation_id) }
+    const initial = await module.rpcCall(initialUrl, 'tools/call', { name: 'execute_remediation', arguments: argumentsValue }, 4, { noCache: true })
+    const initialResult = object(initial.result)
+    const retry = await module.rpcCall(retryUrl, 'tools/call', { name: 'execute_remediation', arguments: argumentsValue, requestState: initialResult.requestState, inputResponses: { approval: { action: 'accept', content: { confirmation: true } } } }, 5, { noCache: true })
+    const executed = structured(retry)
+    providers.push({ provider, initial_replica: replica(initial), retry_replica: replica(retry), resultType: object(retry.result).resultType, effect_count: executed.effect_count })
+  }
+  return { providers }
+}
+
 async function compareMatrix(): Promise<Json> {
   const pairs = [['raw', 'raw'], ['raw', 'sdk'], ['sdk', 'raw'], ['sdk', 'sdk']] as const
   const observations: Json[] = []
@@ -118,6 +185,9 @@ export async function evaluate(input: Json): Promise<Json> {
   if (input.operation === 'run_matrix_scenario' && input.scenario === 'catalogs') return await catalogs(input)
   if (input.operation === 'run_matrix_scenario' && input.scenario === 'workflow') return await workflow(input)
   if (input.operation === 'compare_matrix') return await compareMatrix()
+  if (input.operation === 'compare_provider_outputs') return await providerDifferences()
+  if (input.operation === 'send_public_requests') return await publicDistribution(input)
+  if (input.operation === 'cross_replica_mrtr') return await crossReplica(input)
   throw new RangeError(`Unsupported integration operation: ${String(input.operation)}`)
 }
 
