@@ -181,6 +181,56 @@ async function compareMatrix(): Promise<Json> {
   return { equivalent: mismatches.length === 0, mismatches }
 }
 
+async function catalogPerformance(input: Json): Promise<Json> {
+  // JavaScript profiles are deliberately executable outside the TypeScript harness (for k6/CI reuse).
+  // @ts-expect-error The profile remains plain JavaScript by contract.
+  const profile = await import('../test/performance/catalog.js') as {
+    configuredTargets(environments: unknown[]): { environment: unknown; url: string }[]
+    measureCatalog(config: Json): Promise<{ p95_ms: number; error_rate: number }>
+  }
+  if (!Array.isArray(input.environments)) throw new TypeError('environments required')
+  const observations = await Promise.all(profile.configuredTargets(input.environments).map(async (target) => ({
+    environment: target.environment,
+    ...await profile.measureCatalog({
+      url: target.url,
+      warmupRequests: Number(input.warmup_requests),
+      ratePerSecond: Number(input.rate_per_second),
+      durationSeconds: Number(input.duration_seconds),
+    }),
+  })))
+  const p95 = Math.max(...observations.map((value) => value.p95_ms))
+  const errorRate = Math.max(...observations.map((value) => value.error_rate))
+  return { thresholds: { p95_ms: { max: 750 }, error_rate: { lt: 0.01 } }, holds: p95 <= 750 && errorRate < 0.01 }
+}
+
+async function replicaPerformance(input: Json): Promise<Json> {
+  const requests = Number(input.requests)
+  const result = await publicDistribution({ count_per_endpoint: requests, endpoints: [
+    { provider: 'raw', url: 'http://localhost/raw/mcp' },
+    { provider: 'sdk', url: 'http://localhost/sdk/mcp' },
+  ] })
+  const providers = result.providers
+  if (!Array.isArray(providers)) throw new TypeError('providers missing')
+  const minimumReplicas = Math.min(...providers.map((value) => object(value).unique_replicas).map((value) => Array.isArray(value) ? value.length : 0))
+  const mismatches = providers.reduce((sum, value) => {
+    const current = object(value).normalized_mismatches
+    return sum + (Array.isArray(current) ? current.length : 1)
+  }, 0)
+  return { thresholds: { unique_replicas: { min: 2 }, response_mismatches: { max: 0 } }, holds: minimumReplicas >= 2 && mismatches === 0 }
+}
+
+async function mrtrPerformance(input: Json): Promise<Json> {
+  // @ts-expect-error The profile remains plain JavaScript by contract.
+  const profile = await import('../test/performance/mrtr.js') as {
+    concurrentAcceptedRetries(config: Json): Promise<{ effect_count: number }>
+  }
+  const result = await profile.concurrentAcceptedRetries({
+    url: process.env.PERF_MRTR_URL ?? 'http://127.0.0.1/raw/mcp',
+    concurrentRetries: Number(input.concurrent_retries),
+  })
+  return { thresholds: { effect_count: { min: 1, max: 1 } }, holds: result.effect_count === 1 }
+}
+
 export async function evaluate(input: Json): Promise<Json> {
   if (input.operation === 'run_matrix_scenario' && input.scenario === 'catalogs') return await catalogs(input)
   if (input.operation === 'run_matrix_scenario' && input.scenario === 'workflow') return await workflow(input)
@@ -188,7 +238,10 @@ export async function evaluate(input: Json): Promise<Json> {
   if (input.operation === 'compare_provider_outputs') return await providerDifferences()
   if (input.operation === 'send_public_requests') return await publicDistribution(input)
   if (input.operation === 'cross_replica_mrtr') return await crossReplica(input)
-  throw new RangeError(`Unsupported integration operation: ${String(input.operation)}`)
+  if (input.profile === 'catalog-latency') return await catalogPerformance(input)
+  if (input.profile === 'replica-distribution') return await replicaPerformance(input)
+  if (input.profile === 'concurrent-mrtr-idempotency') return await mrtrPerformance(input)
+  throw new RangeError(`Unsupported integration operation: ${String(input.operation ?? input.profile)}`)
 }
 
 async function main(): Promise<void> {
